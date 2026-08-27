@@ -1972,7 +1972,8 @@ export default function App() {
       activityFeed: [newLog, ...activityFeed],
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
     fetch('/api/crm-data', {
       method: 'POST',
@@ -2019,7 +2020,8 @@ export default function App() {
       activityFeed: [newLog, ...activityFeed],
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
     fetch('/api/crm-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.warn);
     saveCrmDataToFirestore(payload).catch(console.warn);
@@ -2059,7 +2061,8 @@ export default function App() {
       activityFeed: [newLog, ...activityFeed],
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
     fetch('/api/crm-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.warn);
     saveCrmDataToFirestore(payload).catch(console.warn);
@@ -2226,7 +2229,8 @@ export default function App() {
       activityFeed,
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
     saveCrmDataToFirestore(payload).catch(console.warn);
     fetch('/api/crm-data', {
@@ -2287,7 +2291,8 @@ export default function App() {
       activityFeed,
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
 
     saveCrmDataToFirestore(payload).catch(err => console.warn('Error saving profile photo to Firestore:', err));
@@ -2345,7 +2350,8 @@ export default function App() {
       activityFeed,
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
 
     saveCrmDataToFirestore(payload).catch(err => console.warn('Error saving updated profile to Firestore:', err));
@@ -2390,7 +2396,8 @@ export default function App() {
       activityFeed,
       arquivos,
       crmName,
-      telSede
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
 
     saveCrmDataToFirestore(payload).catch(err => console.warn('Error saving user photo:', err));
@@ -2584,8 +2591,9 @@ export default function App() {
         activityFeed,
         arquivos: updated,
         crmName,
-        telSede
-      };
+      telSede,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
+    };
       saveCrmDataToFirestore(payload).catch(err => console.warn('Error updating file in Firestore:', err));
 
       addNotification(
@@ -3977,3 +3985,4 @@ export default function App() {
     </div>
   );
 }
+
