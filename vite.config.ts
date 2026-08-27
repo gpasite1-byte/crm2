@@ -28,6 +28,13 @@ if (fs.existsSync(rootVideosDir)) {
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://cwojfqzmcjraxdxodbdg.supabase.co'),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('sb_publishable_-09xQP6TNwAOV0dD55K7Rg_GxHzH_rf'),
+      'import.meta.env.VITE_PUSHER_KEY': JSON.stringify('a550429481c13c39f9a6'),
+      'import.meta.env.VITE_PUSHER_CLUSTER': JSON.stringify('sa1'),
+      'import.meta.env.VITE_ABLY_API_KEY': JSON.stringify('m2MFEg.B7JOLQ:u_MtYkbldvUScXPtRmsnN7MglKkVGlxJquINjmlVsOo')
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
