@@ -24,6 +24,9 @@ export function sanitizeAndDeduplicateUsers(list: Usuario[] = []): Usuario[] {
     if ((nome === 'admin' || nome === 'administrador') && email !== 'admin@gpaangola.co.ao' && email !== 'admin') {
       continue;
     }
+    if (nome.startsWith('admin') && !['admin', 'admin1', 'admin2', 'admini2', 'admin 1', 'admin 2'].includes(nome) && !['admin@gpaangola.co.ao', 'admin1@gpaangola.co.ao', 'admin2@gpaangola.co.ao', 'david.neto@gpaangola.co.ao'].includes(email)) {
+      continue;
+    }
 
     if ((id && seenIds.has(id)) || (email && seenEmails.has(email))) {
       continue;

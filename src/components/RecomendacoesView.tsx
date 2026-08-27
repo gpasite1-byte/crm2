@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Deal, Usuario } from '../types';
+import { Deal, Usuario, isUserCommercial } from '../types';
 import { Search, Filter, Plus, CheckCircle2, Clock, AlertCircle, Sparkles, UserCheck, X, MessageSquare, ShieldAlert, Edit, Trash2 } from 'lucide-react';
 
 import GlobalPeriodBar from './GlobalPeriodBar';
@@ -625,7 +625,7 @@ export default function RecomendacoesView({
               <option value="Amélia Cassinda">Amélia Cassinda</option>
               <option value="Marta de Oliveira">Marta de Oliveira</option>
               <option value="Ilídio Pedro">Ilídio Pedro</option>
-              {comerciais.filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
+              {comerciais.filter(isUserCommercial).filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
                 <option key={u.id} value={u.nome}>{u.nome}</option>
               ))}
             </select>
@@ -805,7 +805,7 @@ export default function RecomendacoesView({
                   <option value="Amélia Cassinda">Amélia Cassinda</option>
                   <option value="Marta de Oliveira">Marta de Oliveira</option>
                   <option value="Ilídio Pedro">Ilídio Pedro</option>
-                  {comerciais.filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
+                  {comerciais.filter(isUserCommercial).filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
                     <option key={u.id} value={u.nome}>{u.nome}</option>
                   ))}
                 </select>
@@ -996,7 +996,7 @@ export default function RecomendacoesView({
                     <option value="Amélia Cassinda">Amélia Cassinda</option>
                     <option value="Marta de Oliveira">Marta de Oliveira</option>
                     <option value="Ilídio Pedro">Ilídio Pedro</option>
-                    {comerciais.filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
+                    {comerciais.filter(isUserCommercial).filter(u => !['Luísa Baltazar', 'Amélia Cassinda', 'Marta de Oliveira', 'Ilídio Pedro'].includes(u.nome)).map(u => (
                       <option key={u.id} value={u.nome}>{u.nome}</option>
                     ))}
                   </select>

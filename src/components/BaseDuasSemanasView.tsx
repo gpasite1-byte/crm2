@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Deal, Usuario, isUserManager } from '../types';
+import { Deal, Usuario, isUserManager, isUserCommercial } from '../types';
 import { 
   Search, Plus, Filter, Database, FileSpreadsheet, TrendingUp, CheckCircle, 
   XCircle, Clock, Sparkles, Edit3, Trash2, Save, X, Lock, ShieldCheck, RefreshCw 
@@ -999,7 +999,7 @@ export default function BaseDuasSemanasView({
                     className="w-full border border-gray-300 dark:border-slate-700 rounded-sm p-2 bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-hidden focus:border-[#1B365D] disabled:opacity-80 disabled:cursor-not-allowed font-medium"
                   >
                     {comerciais && comerciais.length > 0 ? (
-                      comerciais.map(c => (
+                      comerciais.filter(isUserCommercial).map(c => (
                         <option key={c.id} value={c.nome}>{c.nome}</option>
                       ))
                     ) : (

@@ -20,19 +20,71 @@ export interface Usuario {
   emailNotificacao?: string;
 }
 
-export function isUserCommercial(u: Usuario | null): boolean {
+export function isPureAdminUser(u: Usuario | string | null | undefined): boolean {
   if (!u) return false;
-  return u.perfil === 'comercial';
+  const id = typeof u === 'string' ? '' : (u.id || '');
+  const name = typeof u === 'string' ? u : (u.nome || u.email || '');
+  const email = typeof u === 'string' ? (u.includes('@') ? u : '') : (u.email || '');
+  const perfil = typeof u !== 'string' ? u.perfil : undefined;
+  const funcao = typeof u !== 'string' ? u.funcao : undefined;
+
+  if (id === 'u_admin' || id === 'u_admin1' || id === 'u_admin2' || id === 'admin' || id === 'admin1' || id === 'admin2') {
+    return true;
+  }
+
+  const norm = (name || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  const cleanName = norm.replace(/[\s\-_.]+/g, '');
+  const normEmail = (email || '').toLowerCase().trim();
+
+  if (perfil === 'admin') return true;
+  if (funcao && (funcao.toLowerCase().includes('administrador') || funcao.toLowerCase().includes('admin'))) return true;
+
+  if (
+    cleanName === 'admin' ||
+    cleanName === 'admin1' ||
+    cleanName === 'admin2' ||
+    cleanName === 'admini2' ||
+    cleanName === 'admin3' ||
+    cleanName === 'administrador' ||
+    cleanName === 'administrador1' ||
+    cleanName === 'administrador2' ||
+    cleanName.startsWith('admin') ||
+    cleanName.startsWith('administrador') ||
+    norm.startsWith('admin') ||
+    norm.startsWith('administrador') ||
+    normEmail.startsWith('admin') ||
+    normEmail.includes('admin@') ||
+    normEmail.includes('admin1@') ||
+    normEmail.includes('admin2@') ||
+    normEmail === 'admin@gpaangola.co.ao' ||
+    normEmail === 'admin1@gpaangola.co.ao' ||
+    normEmail === 'admin2@gpaangola.co.ao'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isUserCommercial(u: Usuario | string | null | undefined): boolean {
+  if (!u) return false;
+  if (isPureAdminUser(u)) return false;
+  if (typeof u === 'string') return true;
+  return u.perfil === 'comercial' || (!u.perfil && !isPureAdminUser(u));
 }
 
 export function isUserAdmin(u: Usuario | null): boolean {
   if (!u) return false;
-  return u.perfil === 'admin';
+  return u.perfil === 'admin' || isPureAdminUser(u);
 }
 
 export function isUserManager(u: Usuario | null): boolean {
   if (!u) return false;
-  return u.perfil === 'admin' || u.perfil === 'supervisor';
+  return u.perfil === 'admin' || u.perfil === 'supervisor' || isPureAdminUser(u);
 }
 
 export interface Cliente {

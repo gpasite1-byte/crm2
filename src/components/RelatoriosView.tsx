@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Deal, Usuario, RelatorioDiario, HistoricoSemanal, HistoricoMensal } from '../types';
+import { Deal, Usuario, RelatorioDiario, HistoricoSemanal, HistoricoMensal, isUserCommercial } from '../types';
 import {
   FileText, Printer, Download, Filter, Cloud, CheckCircle, AlertCircle,
   FileSpreadsheet, Calendar, Plus, Save, Clock, RefreshCw, BarChart2,
@@ -24,11 +24,11 @@ interface RelatoriosViewProps {
 }
 
 export default function RelatoriosView({
-  deals,
-  comerciais,
-  relatoriosDiarios,
-  historicoSemanas,
-  historicoMeses,
+  deals = [],
+  comerciais = [],
+  relatoriosDiarios = [],
+  historicoSemanas = [],
+  historicoMeses = [],
   loggedUser,
   onSaveRelatorioDiario,
   onSaveNovaSemana,
@@ -79,10 +79,13 @@ export default function RelatoriosView({
   const [diarioPropostasValor, setDiarioPropostasValor] = useState(167610132.48);
   const [diarioCobrancas, setDiarioCobrancas] = useState('Sem pendências de cobrança no dia.');
 
-  // Team activities state inside daily form - auto-generates empty slots for ALL commercial users
+  // Team activities state inside daily form - auto-generates empty slots for ALL commercial users (excluding pure Admins)
   const [teamLogs, setTeamLogs] = useState<{ comercialNome: string; resumo: string }[]>(() => {
     if (comerciais && Array.isArray(comerciais) && comerciais.length > 0) {
-      return comerciais.map(u => ({ comercialNome: u.nome, resumo: '' }));
+      const activeCommercials = comerciais.filter(isUserCommercial);
+      if (activeCommercials.length > 0) {
+        return activeCommercials.map(u => ({ comercialNome: u.nome, resumo: '' }));
+      }
     }
     return [
       { comercialNome: 'Luísa Baltazar', resumo: '' },
@@ -407,13 +410,17 @@ export default function RelatoriosView({
     ? `${((liveApprovedValue / liveTotalDealsValue) * 100).toFixed(1)}%`
     : '0%';
 
-  const w1 = historicoSemanas.find(s => s.id === selectedSemanaComp1) || historicoSemanas[0];
-  const w2 = historicoSemanas.find(s => s.id === selectedSemanaComp2) || historicoSemanas[1];
-  const w3 = historicoSemanas.find(s => s.id === selectedSemanaComp3) || historicoSemanas[2];
-  const w4 = historicoSemanas.find(s => s.id === selectedSemanaComp4) || historicoSemanas[3];
+  const safeDiarios = Array.isArray(relatoriosDiarios) ? relatoriosDiarios : [];
+  const safeSemanas = Array.isArray(historicoSemanas) ? historicoSemanas : [];
+  const safeMeses = Array.isArray(historicoMeses) ? historicoMeses : [];
+
+  const w1 = safeSemanas.find(s => s.id === selectedSemanaComp1) || safeSemanas[0];
+  const w2 = safeSemanas.find(s => s.id === selectedSemanaComp2) || safeSemanas[1];
+  const w3 = safeSemanas.find(s => s.id === selectedSemanaComp3) || safeSemanas[2];
+  const w4 = safeSemanas.find(s => s.id === selectedSemanaComp4) || safeSemanas[3];
   const fourWeeks = [w1, w2, w3, w4].filter(Boolean);
 
-  const fourMonths = historicoMeses.slice(-4);
+  const fourMonths = safeMeses.slice(-4);
 
   return (
     <div className="w-full space-y-4 font-serif text-gray-900 my-2 print:p-0">
@@ -501,7 +508,7 @@ export default function RelatoriosView({
                 : 'bg-[#122442] text-white/80 hover:text-white'
             }`}
           >
-            <Layers size={14} /> Histórico Mensal ({historicoMeses.length})
+            <Layers size={14} /> Histórico Mensal ({safeMeses.length})
           </button>
 
           <button
@@ -683,7 +690,7 @@ export default function RelatoriosView({
           )}
 
           {/* List of Daily Reports */}
-          {relatoriosDiarios.map((rd) => (
+          {safeDiarios.map((rd) => (
             <div key={rd.id} className="bg-white border border-gray-400 shadow-sm overflow-hidden font-sans">
               <div className="bg-[#1B365D] text-white p-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -744,7 +751,7 @@ export default function RelatoriosView({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {rd.actividadeEquipa.map((act, i) => (
+                      {(rd.actividadeEquipa || []).map((act, i) => (
                         <tr key={i} className="hover:bg-blue-50/30">
                           <td className="p-2 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
                             {act.comercialNome}
@@ -956,7 +963,7 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 font-sans text-gray-900">
-                {historicoSemanas.map((sem) => (
+                {safeSemanas.map((sem) => (
                   <tr key={sem.id} className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">
                       {sem.rotuloSemana}
@@ -1161,7 +1168,7 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-gray-900 font-sans">
-                {historicoMeses.map((m) => (
+                {safeMeses.map((m) => (
                   <tr key={m.id} className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
                       {m.mes}
@@ -1182,7 +1189,7 @@ export default function RelatoriosView({
                       {m.conversaoMedia || '—'}
                     </td>
                     <td className="p-2.5 text-gray-700 text-[11px]">
-                      {m.semanasIncluidas.length > 0 ? m.semanasIncluidas.join(', ') : '—'}
+                      {Array.isArray(m.semanasIncluidas) && m.semanasIncluidas.length > 0 ? m.semanasIncluidas.join(', ') : '—'}
                     </td>
                   </tr>
                 ))}
@@ -1192,7 +1199,7 @@ export default function RelatoriosView({
 
           {/* Cards Breakdown of Monthly Reports */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {historicoMeses.map((mes) => (
+            {safeMeses.map((mes) => (
               <div key={mes.id} className="bg-white border border-gray-400 shadow-sm rounded-xs p-4 space-y-3 font-sans">
                 <div className="border-b pb-2 flex items-center justify-between">
                   <h3 className="text-base font-black text-[#1B365D] font-serif uppercase">
@@ -1230,7 +1237,7 @@ export default function RelatoriosView({
                 </div>
 
                 <div className="text-xs pt-1 border-t flex items-center justify-between text-gray-600">
-                  <span>Semanas Incluídas: {mes.semanasIncluidas.join(', ')}</span>
+                  <span>Semanas Incluídas: {Array.isArray(mes.semanasIncluidas) ? mes.semanasIncluidas.join(', ') : '—'}</span>
                   <button
                     onClick={handlePrint}
                     className="text-[#1B365D] font-bold hover:underline flex items-center gap-1 cursor-pointer"
@@ -1261,7 +1268,7 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-gray-900 font-sans">
-                {historicoSemanas.map((sem) => (
+                {safeSemanas.map((sem) => (
                   <tr key={sem.id} className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">{sem.rotuloSemana}</td>
                     <td className="p-2.5 border-r border-gray-300 font-medium">{sem.mes}</td>
@@ -1308,7 +1315,7 @@ export default function RelatoriosView({
                     onChange={(e) => setSelectedSemanaComp1(e.target.value)}
                     className="font-bold text-[#1B365D] bg-transparent focus:outline-none cursor-pointer"
                   >
-                    {historicoSemanas.map(s => (
+                    {(historicoSemanas || []).map(s => (
                       <option key={s.id} value={s.id}>{s.rotuloSemana}</option>
                     ))}
                   </select>
@@ -1321,7 +1328,7 @@ export default function RelatoriosView({
                     onChange={(e) => setSelectedSemanaComp2(e.target.value)}
                     className="font-bold text-[#1B365D] bg-transparent focus:outline-none cursor-pointer"
                   >
-                    {historicoSemanas.map(s => (
+                    {(historicoSemanas || []).map(s => (
                       <option key={s.id} value={s.id}>{s.rotuloSemana}</option>
                     ))}
                   </select>
@@ -1334,7 +1341,7 @@ export default function RelatoriosView({
                     onChange={(e) => setSelectedSemanaComp3(e.target.value)}
                     className="font-bold text-[#1B365D] bg-transparent focus:outline-none cursor-pointer"
                   >
-                    {historicoSemanas.map(s => (
+                    {(historicoSemanas || []).map(s => (
                       <option key={s.id} value={s.id}>{s.rotuloSemana}</option>
                     ))}
                   </select>
@@ -1347,7 +1354,7 @@ export default function RelatoriosView({
                     onChange={(e) => setSelectedSemanaComp4(e.target.value)}
                     className="font-bold text-[#1B365D] bg-transparent focus:outline-none cursor-pointer"
                   >
-                    {historicoSemanas.map(s => (
+                    {(historicoSemanas || []).map(s => (
                       <option key={s.id} value={s.id}>{s.rotuloSemana}</option>
                     ))}
                   </select>
@@ -1956,7 +1963,7 @@ export default function RelatoriosView({
                     className="text-xs font-bold bg-slate-50 border border-gray-300 rounded-xs p-1.5 focus:outline-none"
                   >
                     <option value="todos">-- Todos os Comerciais --</option>
-                    {comerciais.map(u => (
+                    {comerciais.filter(isUserCommercial).map(u => (
                       <option key={u.id} value={u.id}>{u.nome}</option>
                     ))}
                   </select>

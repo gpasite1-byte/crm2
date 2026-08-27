@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { OperacaoLog, Usuario, isUserAdmin } from '../types';
+import { OperacaoLog, Usuario, isUserAdmin, isPureAdminUser } from '../types';
 import {
   History,
   Search,
@@ -108,14 +108,14 @@ export default function HistoricoDiaView({
     }
   };
 
-  // Extract unique commercial names from logs + user list
+  // Extract unique commercial names from logs + user list (strictly excluding admins)
   const listComerciaisOptions = useMemo(() => {
     const namesSet = new Set<string>();
     comerciais.forEach(u => {
-      if (u.nome) namesSet.add(u.nome.trim());
+      if (u.nome && !isPureAdminUser(u)) namesSet.add(u.nome.trim());
     });
     operacoesLog.forEach(op => {
-      if (op.usuarioNome) namesSet.add(op.usuarioNome.trim());
+      if (op.usuarioNome && !isPureAdminUser(op.usuarioNome)) namesSet.add(op.usuarioNome.trim());
     });
     return Array.from(namesSet).sort();
   }, [comerciais, operacoesLog]);
@@ -129,30 +129,18 @@ export default function HistoricoDiaView({
       } else if (dateMode === 'ontem') {
         const yesterdayStr = new Date(Date.now() - 86400000).toISOString().substring(0, 10);
         if (!op.dataHora.startsWith(yesterdayStr)) return false;
-      } else if (dateMode === '7dias') {
-        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().substring(0, 10);
-        const logDateStr = op.dataHora.substring(0, 10);
-        if (logDateStr < sevenDaysAgo) return false;
       } else if (dateMode === 'custom' && selectedDate) {
         if (!op.dataHora.startsWith(selectedDate)) return false;
       }
 
-      // Comercial filter
-      if (selectedComercial !== 'todos') {
-        if ((op.usuarioNome || '').toLowerCase().trim() !== selectedComercial.toLowerCase().trim()) {
-          return false;
-        }
-      }
+      // Action type filter
+      if (selectedTipo !== 'todos' && op.tipoAcao !== selectedTipo) return false;
 
-      // Tipo de Acao filter
-      if (selectedTipo !== 'todos') {
-        if (op.tipoAcao !== selectedTipo) return false;
-      }
+      // Commercial filter
+      if (selectedComercial !== 'todos' && op.usuarioNome !== selectedComercial) return false;
 
-      // Entidade filter
-      if (selectedEntidade !== 'todos') {
-        if (op.entidade !== selectedEntidade) return false;
-      }
+      // Entity filter
+      if (selectedEntidade !== 'todos' && op.entidade !== selectedEntidade) return false;
 
       // Search term filter
       if (searchTerm.trim()) {
@@ -166,12 +154,12 @@ export default function HistoricoDiaView({
 
       return true;
     });
-  }, [operacoesLog, dateMode, selectedDate, todayStr, selectedComercial, selectedTipo, selectedEntidade, searchTerm]);
+  }, [operacoesLog, dateMode, todayStr, selectedDate, selectedTipo, selectedComercial, selectedEntidade, searchTerm]);
 
-  // Daily Metrics Calculations
+  // Daily Metrics Calculations (Active Commercials excluding admins)
   const metrics = useMemo(() => {
     const total = filteredLogs.length;
-    const activeComerciais = new Set(filteredLogs.map(op => op.usuarioNome)).size;
+    const activeComerciais = new Set(filteredLogs.filter(op => !isPureAdminUser(op.usuarioNome)).map(op => op.usuarioNome)).size;
     const criacoes = filteredLogs.filter(op => op.tipoAcao === 'criacao').length;
     const edicoes = filteredLogs.filter(op => op.tipoAcao === 'edicao' || op.tipoAcao === 'status').length;
     const exclusoes = filteredLogs.filter(op => op.tipoAcao === 'exclusao').length;

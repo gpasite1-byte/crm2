@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Usuario, Deal, MetaComercialDef } from '../types';
+import { Usuario, Deal, MetaComercialDef, isUserCommercial } from '../types';
 import { Target, Award, TrendingUp, DollarSign, Users, ChevronUp, ChevronDown, Percent, Sparkles, CheckCircle2, ShieldCheck, PieChart, BarChart3, Trophy, Calendar } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
@@ -49,11 +49,8 @@ export default function MetasComissoesView({
     return new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(val).replace('AOA', 'Kz');
   };
 
-  // Filter out administrators and secret managers (Admin, Admin1A, Admin2v, etc.)
-  const salesComerciais = comerciais.filter(u => {
-    const n = u.nome.trim().toLowerCase();
-    return u.perfil !== 'admin' && !n.includes('admin') && n !== 'admin1a' && n !== 'admin2v';
-  });
+  // Filter out administrators (Admin, Admin 1, Admin 2, etc.) - only actual commercial team
+  const salesComerciais = comerciais.filter(isUserCommercial);
 
   // Calculate actual sales per commercial (won deals)
   const statsPerCommercial = salesComerciais.map(u => {

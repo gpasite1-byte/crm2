@@ -76,24 +76,84 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       try {
         const buffer = evt.target?.result;
         const wb = XLSX.read(buffer, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
-        
-        const jsonData = XLSX.utils.sheet_to_json<any>(ws, { header: 1 });
-        if (!jsonData || jsonData.length < 2) {
-          setErrorMsg('O ficheiro Excel está vazio ou não possui linhas de dados suficientes.');
+
+        if (!wb.SheetNames || wb.SheetNames.length === 0) {
+          setErrorMsg('O ficheiro Excel não contém folhas de cálculo válidas.');
           setIsProcessing(false);
           return;
         }
 
-        const rawHeaders = (jsonData[0] as any[]).map(h => String(h || '').trim());
-        const rowData = XLSX.utils.sheet_to_json<any>(ws);
+        let allCollectedRows: any[] = [];
+        let detectedHeaders: string[] = [];
 
-        setHeaders(rawHeaders);
-        setRawRows(rowData);
+        // Scan all sheets in workbook to extract real data
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          if (!ws) continue;
+
+          const matrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+          if (!matrix || matrix.length === 0) continue;
+
+          // Find header row in first 15 rows
+          let headerIdx = -1;
+          for (let r = 0; r < Math.min(15, matrix.length); r++) {
+            const rowArr = matrix[r];
+            if (!Array.isArray(rowArr)) continue;
+            const rowStr = rowArr.map(c => normalizeHeader(String(c || ''))).join(' ');
+            if (
+              rowStr.includes('cliente') || 
+              rowStr.includes('empresa') || 
+              rowStr.includes('proposta') || 
+              rowStr.includes('servico') || 
+              rowStr.includes('valor') || 
+              rowStr.includes('comercial') || 
+              rowStr.includes('gestor') ||
+              rowStr.includes('estado')
+            ) {
+              headerIdx = r;
+              break;
+            }
+          }
+
+          if (headerIdx >= 0) {
+            const headers = matrix[headerIdx].map((h: any) => String(h || '').trim());
+            detectedHeaders = headers;
+            const dataRows = matrix.slice(headerIdx + 1);
+
+            dataRows.forEach(r => {
+              if (!Array.isArray(r) || r.every(cell => cell === '' || cell === null || cell === undefined)) return;
+              const rowObj: Record<string, any> = { _sheetName: sheetName };
+              headers.forEach((h, colIdx) => {
+                if (h) rowObj[h] = r[colIdx] !== undefined ? r[colIdx] : '';
+              });
+              allCollectedRows.push(rowObj);
+            });
+          } else {
+            // Standard object parse
+            const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: '' });
+            if (rows && rows.length > 0) {
+              rows.forEach(r => {
+                r._sheetName = sheetName;
+                allCollectedRows.push(r);
+              });
+              if (detectedHeaders.length === 0 && rows[0]) {
+                detectedHeaders = Object.keys(rows[0]).filter(k => k !== '_sheetName');
+              }
+            }
+          }
+        }
+
+        if (allCollectedRows.length === 0) {
+          setErrorMsg('O ficheiro Excel foi lido mas não contém linhas de registos.');
+          setIsProcessing(false);
+          return;
+        }
+
+        setHeaders(detectedHeaders);
+        setRawRows(allCollectedRows);
 
         // Process initial mapping
-        processMapping(rowData, importType, rawHeaders);
+        processMapping(allCollectedRows, importType, detectedHeaders);
         setIsProcessing(false);
       } catch (err: any) {
         console.error('Erro ao ler Excel:', err);

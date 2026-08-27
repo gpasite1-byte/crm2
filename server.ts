@@ -211,6 +211,21 @@ app.post("/api/realtime/messages", async (req, res) => {
     if (!current.some((m: any) => m.id === newMsg.id)) {
       current.push(newMsg);
       saveServerChatMessages(current);
+
+      // Instantly mark the message sender as ONLINE
+      if (newMsg.senderId) {
+        const now = Date.now();
+        const pEntry = {
+          userId: String(newMsg.senderId),
+          nome: String(newMsg.senderName || ''),
+          lastSeen: now,
+          status: 'online'
+        };
+        userPresenceMap.set(String(newMsg.senderId), pEntry);
+        if (newMsg.senderName) userPresenceMap.set(String(newMsg.senderName).trim().toLowerCase(), pEntry);
+        broadcastWS({ type: "PRESENCE_HEARTBEAT", payload: pEntry });
+      }
+
       broadcastWS({ type: "NEW_MESSAGE", payload: newMsg });
       await broadcastFailover("NEW_MESSAGE", newMsg);
     }
@@ -306,6 +321,96 @@ app.post("/api/realtime/calls/clear", (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+// ----------------------------------------------------
+// Real-time Active User Presence Engine
+// ----------------------------------------------------
+interface UserPresenceEntry {
+  userId: string;
+  email?: string;
+  nome?: string;
+  lastSeen: number;
+  status: string;
+}
+
+const userPresenceMap = new Map<string, UserPresenceEntry>();
+
+app.get("/api/realtime/presence", (req, res) => {
+  try {
+    const now = Date.now();
+    // Active if heartbeat received in the last 30 seconds
+    const activeThreshold = 30000;
+    const onlineList: UserPresenceEntry[] = [];
+    const onlineUserIds: string[] = [];
+    const onlineEmails: string[] = [];
+    const onlineNames: string[] = [];
+
+    for (const [key, info] of userPresenceMap.entries()) {
+      if (now - info.lastSeen < activeThreshold) {
+        onlineList.push(info);
+        if (info.userId && !onlineUserIds.includes(info.userId)) onlineUserIds.push(info.userId);
+        if (info.email && !onlineEmails.includes(info.email.toLowerCase())) onlineEmails.push(info.email.toLowerCase());
+        if (info.nome && !onlineNames.includes(info.nome.toLowerCase())) onlineNames.push(info.nome.toLowerCase());
+      } else {
+        userPresenceMap.delete(key);
+      }
+    }
+
+    res.json({
+      success: true,
+      onlineUserIds,
+      onlineEmails,
+      onlineNames,
+      presence: onlineList
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post("/api/realtime/presence/heartbeat", async (req, res) => {
+  try {
+    const { userId, email, nome, status } = req.body || {};
+    if (!userId && !email && !nome) return res.status(400).json({ success: false, error: "userId or email required" });
+
+    const cleanId = String(userId || email || nome).trim();
+    const now = Date.now();
+    const entry: UserPresenceEntry = {
+      userId: String(userId || cleanId),
+      email: email ? String(email).trim().toLowerCase() : undefined,
+      nome: nome ? String(nome).trim() : undefined,
+      lastSeen: now,
+      status: status || 'online'
+    };
+
+    userPresenceMap.set(cleanId.toLowerCase(), entry);
+    if (email) userPresenceMap.set(String(email).trim().toLowerCase(), entry);
+    if (userId) userPresenceMap.set(String(userId).trim(), entry);
+
+    broadcastWS({ type: "PRESENCE_HEARTBEAT", payload: entry });
+    await broadcastFailover("PRESENCE_HEARTBEAT", entry);
+
+    res.json({ success: true, entry });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post("/api/realtime/presence/offline", async (req, res) => {
+  try {
+    const { userId, email, nome } = req.body || {};
+    const keysToRemove = [userId, email, nome].filter(Boolean).map(k => String(k).trim().toLowerCase());
+    keysToRemove.forEach(k => userPresenceMap.delete(k));
+    
+    broadcastWS({ type: "PRESENCE_OFFLINE", payload: { userId, email, nome } });
+    await broadcastFailover("PRESENCE_OFFLINE", { userId, email, nome });
+    
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+// ----------------------------------------------------
 
 // Helper to get Excel Documents directory (supports 'Documentos' as primary and 'Ducumentos' as fallback)
 function getExcelDocsDir(): string {
@@ -763,23 +868,13 @@ app.get("/api/dump-excel", (req, res) => {
 
 
 
-// GET CRM data (fetches from MySQL cPanel if available, otherwise Supabase Cloud, otherwise local file)
+// GET CRM data (serves persistent local crm-db.json merged with any cloud additions)
 app.get("/api/crm-data", async (req, res) => {
   try {
-    // 1. Try MySQL cPanel first if configured
-    if (isMySqlConfigured()) {
-      try {
-        const mysqlData = await loadCrmDataFromMySql();
-        if (mysqlData && (mysqlData.deals?.length || mysqlData.clients?.length || mysqlData.comerciais?.length)) {
-          return res.json(mysqlData);
-        }
-      } catch (err) {
-        console.warn('MySQL load notice:', err);
-      }
-    }
-
-    // 2. Try Supabase Cloud
+    const localData = getCrmData();
     let cloudData: any = null;
+
+    // 1. Try Supabase Cloud if available
     try {
       const { data, error } = await supabaseServer
         .from('crm_data')
@@ -791,11 +886,26 @@ app.get("/api/crm-data", async (req, res) => {
       }
     } catch (e) {}
 
-    const localData = getCrmData();
-
-    if (cloudData && (cloudData.deals?.length || cloudData.clients?.length)) {
-      return res.json(cloudData);
+    // If cloudData exists, merge additively into localData so nothing is lost
+    if (cloudData) {
+      if (Array.isArray(cloudData.deals)) {
+        const localDealIds = new Set((localData.deals || []).map((d: any) => d.id));
+        cloudData.deals.forEach((d: any) => {
+          if (d && d.id && !localDealIds.has(d.id)) {
+            localData.deals.push(d);
+          }
+        });
+      }
+      if (Array.isArray(cloudData.clients)) {
+        const localCliIds = new Set((localData.clients || []).map((c: any) => c.id));
+        cloudData.clients.forEach((c: any) => {
+          if (c && c.id && !localCliIds.has(c.id)) {
+            localData.clients.push(c);
+          }
+        });
+      }
     }
+
     return res.json(localData);
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load CRM data from server." });

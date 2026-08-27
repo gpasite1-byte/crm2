@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Deal, Usuario } from '../types';
+import { Deal, Usuario, isUserCommercial } from '../types';
 import { BarChart3, Calendar, TrendingUp, ArrowUpRight, ArrowDownRight, Layers, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -399,7 +399,7 @@ export default function ComparativoSemanalView({
                     onChange={e => setNewComercialId(e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded-lg text-xs font-bold bg-white focus:ring-2 focus:ring-blue-500"
                   >
-                    {comerciais.map(c => (
+                    {comerciais.filter(isUserCommercial).map(c => (
                       <option key={c.id} value={c.id}>{c.nome}</option>
                     ))}
                   </select>

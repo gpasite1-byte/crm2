@@ -37,6 +37,9 @@ export default defineConfig(() => {
       // Disable HMR auto-reloads to prevent page flickering and auto-refreshes while user is typing
       hmr: false,
       strictPort: false,
+      watch: {
+        ignored: ['**/dist/**', '**/videos/**', '**/Ducumentos/**', '**/RELATORIO CRM GPA/**', '**/*.xlsx', '**/*.htm']
+      }
     },
   };
 });

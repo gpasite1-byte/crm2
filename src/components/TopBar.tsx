@@ -224,6 +224,17 @@ export default function TopBar({
             <span>Firestore v8.0 PRO</span>
           </div>
 
+          {onOpenExcelImport && (
+            <button
+              onClick={onOpenExcelImport}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/30 transition cursor-pointer border border-emerald-400/40"
+              title="Importar Ficheiro Excel (.xlsx / .xls / .csv)"
+            >
+              <FileSpreadsheet size={15} />
+              <span>Importar Excel</span>
+            </button>
+          )}
+
           <button
             ref={bellRef}
             onClick={() => setShowNotifications(!showNotifications)}

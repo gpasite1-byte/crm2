@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Usuario, Deal, Cliente, Visita } from '../types';
+import { Usuario, Deal, Cliente, Visita, isUserCommercial } from '../types';
 import { FileSpreadsheet, Upload, Clipboard, CheckCircle2, AlertCircle, ArrowRight, RefreshCw, Layers, ShieldCheck, Database, UserCheck, Sliders, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { BasePropostaRow } from '../data/baseDuasSemanasData';
@@ -547,9 +547,9 @@ export default function ExcelImportManager({
               onChange={e => setTargetUserId(e.target.value)}
               className="bg-white border border-blue-300 text-blue-900 font-bold px-3 py-1.5 rounded-lg text-xs focus:outline-none cursor-pointer"
             >
-              {comerciais.map(c => (
+              {comerciais.filter(isUserCommercial).map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.nome} ({c.email}) - {c.perfil === 'admin' ? '👑 Admin' : '👤 Comercial'}
+                  {c.nome} ({c.email}) - {c.funcao || 'Comercial'}
                 </option>
               ))}
             </select>

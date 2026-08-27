@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Usuario, Deal, Cliente } from '../types';
+import { Usuario, Deal, Cliente, isUserCommercial } from '../types';
 import { Sparkles, Volume2, VolumeX, Mic, Send, PlayCircle, FileText, Mail, PhoneCall, Calculator, ShieldAlert, Copy, Check } from 'lucide-react';
 
 interface HelenaViewProps {
@@ -110,7 +110,7 @@ Estou equipada com os mais avançados algoritmos de previsão de faturamento, ge
                      (deals.filter(d => d.etapa === 'producao').reduce((sum, d) => sum + d.valor, 0) * 1.0);
     const conversao = propostasCount ? Math.round((deals.filter(d => d.etapa === 'fechado').length / propostasCount) * 100) : 0;
 
-    const performanceList = comerciais.filter(u => u.perfil === 'comercial').map(u => {
+    const performanceList = comerciais.filter(isUserCommercial).map(u => {
       const uDeals = deals.filter(d => d.comercialId === u.id);
       const uAprovado = uDeals.filter(d => d.etapa === 'fechado').reduce((sum, d) => sum + d.valor, 0);
       const percentMeta = u.metaSemanal ? Math.round((uAprovado / u.metaSemanal) * 100) : 0;

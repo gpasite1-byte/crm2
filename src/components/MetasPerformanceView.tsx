@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Usuario, Deal } from '../types';
+import { Usuario, Deal, isUserCommercial } from '../types';
 import { Target, Flag, TrendingUp, Award, Trophy, CheckCircle2, AlertTriangle, ShieldCheck, DollarSign, Calculator, HelpCircle, Layers, PieChart } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 import GlobalPeriodBar from './GlobalPeriodBar';
@@ -38,7 +38,7 @@ export default function MetasPerformanceView({
   const [simulValue, setSimulValue] = useState(6250000);
 
   useEffect(() => {
-    const defaultCom = comerciais.find(u => u.perfil === 'comercial');
+    const defaultCom = comerciais.find(isUserCommercial);
     if (defaultCom && !selectedComId) {
       setSelectedComId(defaultCom.id);
     }
@@ -134,10 +134,8 @@ export default function MetasPerformanceView({
 
   // Dynamic calculations incorporating ALL commercials from the system and their active deals
   const dynamicRows = useMemo(() => {
-    // Include all sales team members
-    const salesUsers = comerciais.filter(u => 
-      u.perfil === 'comercial' || (u.perfil === 'admin' && (u.metaSemanal > 0 || u.nome.includes('David Neto')))
-    );
+    // Include only active sales team members (strictly excluding Pure Admins)
+    const salesUsers = comerciais.filter(isUserCommercial);
 
     return salesUsers.map(comUser => {
       const official = officialRows.find(r => 
@@ -401,7 +399,7 @@ export default function MetasPerformanceView({
                 onChange={(e) => setSelectedComId(e.target.value)}
                 className="text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg p-2.5 focus:outline-none focus:border-blue-500 w-full"
               >
-                {comerciais.filter(u => u.perfil === 'comercial').map(u => (
+                {comerciais.filter(isUserCommercial).map(u => (
                   <option key={u.id} value={u.id}>{u.nome}</option>
                 ))}
               </select>

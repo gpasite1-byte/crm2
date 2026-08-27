@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Calendar, Filter, Building2, UserCheck, MapPin, RefreshCw, Clock, Layers, Sparkles } from 'lucide-react';
-import { Usuario } from '../types';
+import { Usuario, isUserCommercial } from '../types';
 import { PeriodType } from '../utils/periodEngine';
 import { getCurrentDateFormatted } from '../utils/temporalEngine';
 
@@ -159,7 +159,7 @@ export const GlobalPeriodBar: React.FC<GlobalPeriodBarProps> = ({
             className="w-full bg-slate-950/80 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-colors cursor-pointer"
           >
             <option value="todos">Todos os Comerciais</option>
-            {comerciais.map(c => (
+            {comerciais.filter(isUserCommercial).map(c => (
               <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </select>

@@ -3,7 +3,7 @@
  * Baseado na especificação oficial do modo de funcionamento.
  */
 
-import { Deal, Usuario } from '../types';
+import { Deal, Usuario, isUserCommercial } from '../types';
 
 export type PeriodType = 
   | 'hoje'
@@ -441,9 +441,9 @@ export function generateDynamicWeeklyTimeline(
 
   const currentMondayTime = refMonday.getTime();
 
-  // Calcular meta semanal total da equipa
+  // Calcular meta semanal total da equipa (apenas comerciais activos, excluindo administradores)
   const metaEquipaSemanal = comerciais
-    .filter(c => c.perfil === 'comercial' || c.perfil === 'admin')
+    .filter(isUserCommercial)
     .reduce((sum, c) => sum + (c.metaSemanal || 6250000), 0);
 
   const buckets: WeeklyTimelineBucket[] = weekStartDates.map((mon, idx) => {
@@ -560,7 +560,7 @@ export function generateDynamicMonthlyTimeline(
   const monthBuckets: MonthlyTimelineBucket[] = [];
 
   const metaEquipaMensal = comerciais
-    .filter(c => c.perfil === 'comercial' || c.perfil === 'admin')
+    .filter(isUserCommercial)
     .reduce((sum, c) => sum + (c.metaMensal || 25000000), 0);
 
   // Gerar de Junho a Dezembro do ano de referência
@@ -755,11 +755,11 @@ export function computeCommercialMetrics(
   const conversaoQtdPct = totalEncerradas > 0 ? (curAprovadosCount / totalEncerradas) * 100 : 0;
   const ticketMedio = curAprovadosCount > 0 ? curValorAprovado / curAprovadosCount : 0;
 
-  // CÁLCULO DE METAS & RANKING DOS COMERCIAIS
+  // CÁLCULO DE METAS & RANKING DOS COMERCIAIS (Apenas Comerciais, Excluindo Admins)
   const isWeekly = currentRange.endDate.getTime() - currentRange.startDate.getTime() <= 8 * dayMs;
   
   const commercialRanking = comerciais
-    .filter(c => c.perfil === 'comercial' || c.perfil === 'admin')
+    .filter(isUserCommercial)
     .map(com => {
       const target = isWeekly ? com.metaSemanal || 6250000 : com.metaMensal || 25000000;
       

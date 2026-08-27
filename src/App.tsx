@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Usuario, Cliente, Visita, Deal, Guideline, NotificationItem, ActivityFeed, Arquivo, isUserCommercial, isUserManager,
+  Usuario, Cliente, Visita, Deal, Guideline, NotificationItem, ActivityFeed, Arquivo, isUserCommercial, isUserManager, isPureAdminUser,
   RelatorioDiario, HistoricoSemanal, HistoricoMensal, RecycleItem, PropostaComercial, OperacaoLog
 } from './types';
 import {
@@ -98,6 +98,23 @@ export default function App() {
     saveToLocalStorage('gpa_comerciais', sanitized);
     return sanitized;
   });
+
+  // Pure active commercial team members (strictly excluding administrators like admin, admin1, admin2)
+  const onlyComerciais = useMemo(() => {
+    return comerciais.filter(isUserCommercial);
+  }, [comerciais]);
+
+  // Video background reference with autoplay enforcer
+  const mainVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (mainVideoRef.current) {
+      mainVideoRef.current.defaultMuted = true;
+      mainVideoRef.current.muted = true;
+      mainVideoRef.current.play().catch(() => {});
+    }
+  }, [loggedUser]);
+
   const [clients, setClients] = useState<Cliente[]>(() => {
     return loadFromLocalStorage<Cliente[]>('gpa_clients', initialClients);
   });
@@ -1171,6 +1188,69 @@ export default function App() {
     return () => clearInterval(interval);
   }, [loggedUser, activeTab]);
 
+  // Global Realtime Presence Heartbeat (Ensures user is marked Online across all views)
+  useEffect(() => {
+    if (!loggedUser) return;
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('gpa_realtime_chat_channel_v4');
+      }
+    } catch (e) {}
+
+    const sendPresence = async () => {
+      try {
+        await fetch('/api/realtime/presence/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: loggedUser.id,
+            email: loggedUser.email,
+            nome: loggedUser.nome,
+            status: 'online'
+          })
+        });
+
+        if (bc) {
+          bc.postMessage({
+            type: 'PRESENCE_HEARTBEAT',
+            payload: { userId: loggedUser.id, email: loggedUser.email, nome: loggedUser.nome, status: 'online' }
+          });
+        }
+      } catch (e) {}
+    };
+
+    sendPresence();
+    const interval = setInterval(sendPresence, 3500);
+
+    const handleBeforeUnload = () => {
+      try {
+        const payload = JSON.stringify({
+          userId: loggedUser.id,
+          email: loggedUser.email,
+          nome: loggedUser.nome
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/realtime/presence/offline', payload);
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (bc) bc.close();
+      fetch('/api/realtime/presence/offline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: loggedUser.id, email: loggedUser.email, nome: loggedUser.nome })
+      }).catch(() => {});
+    };
+  }, [loggedUser]);
+
   // Compute total unread chat messages count for Sidebar badge
   const unreadChatCount = React.useMemo(() => {
     if (!loggedUser || !globalChatMessages.length) return 0;
@@ -1825,78 +1905,183 @@ export default function App() {
     );
   };
 
-  // Excel Bulk Data Import Handlers with Global Distribution across 13 Views
+  // Excel Bulk Data Import Handlers with Global Distribution across 13 Views & Immediate Cloud/DB Persistence
   const handleImportDeals = (newDeals: Deal[], rawRows?: any[]) => {
-    const res = distributeImportedRows(rawRows && rawRows.length > 0 ? rawRows : newDeals, {
-      deals,
-      clients,
-      visits,
-      relatoriosDiarios,
-      historicoSemanas,
-      comerciais
+    if (!newDeals || newDeals.length === 0) return;
+    lastMutatedTimeRef.current = Date.now();
+
+    // 1. Deduplicate & Merge into Deals State
+    const existingIds = new Set(deals.map(d => d.id));
+    const existingKeys = new Set(deals.map(d => `${d.titulo?.toLowerCase().trim()}_${d.clienteNome?.toLowerCase().trim()}`));
+    
+    const uniqueNewDeals = newDeals.filter(d => {
+      const key = `${d.titulo?.toLowerCase().trim()}_${d.clienteNome?.toLowerCase().trim()}`;
+      return !existingIds.has(d.id) && !existingKeys.has(key);
     });
 
-    setDeals(res.deals);
-    setClients(res.clients);
-    setVisits(res.visits);
-    setRelatoriosDiarios(res.relatoriosDiarios);
-    setHistoricoSemanas(res.historicoSemanas);
-    if (res.comerciais.length > comerciais.length) {
-      setComerciais(res.comerciais);
-    }
+    const updatedDeals = [...uniqueNewDeals, ...deals];
+    setDeals(updatedDeals);
 
-    const totalVal = newDeals.reduce((acc, d) => acc + (d.valor || 0), 0);
+    // 2. Auto-create clients for deals that don't exist yet
+    const existingClientNames = new Set(clients.map(c => (c.nome || c.empresa || '').toLowerCase().trim()));
+    const newClientsToAdd: Cliente[] = [];
+
+    newDeals.forEach(d => {
+      const cName = (d.clienteNome || d.empresa || '').trim();
+      if (cName && !existingClientNames.has(cName.toLowerCase())) {
+        existingClientNames.add(cName.toLowerCase());
+        newClientsToAdd.push({
+          id: 'cli_auto_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          empresa: d.empresa || cName,
+          nome: cName,
+          nif: d.nif || '',
+          telefone: d.telefone || '923 000 000',
+          provincia: d.provincia || 'Luanda',
+          segmento: d.segmento || 'Geral',
+          status: 'ativo',
+          responsavel: d.comercialId || loggedUser?.id || comerciais[0]?.id || 'u1',
+          ultimaVisita: 'Hoje',
+          proximaVisita: 'Em agendamento'
+        });
+      }
+    });
+
+    const updatedClients = [...newClientsToAdd, ...clients];
+    setClients(updatedClients);
+
+    // 3. Immediate LocalStorage & Server Persistence
+    saveToLocalStorage('gpa_deals', updatedDeals);
+    saveToLocalStorage('gpa_clients', updatedClients);
+
+    const totalVal = uniqueNewDeals.reduce((acc, d) => acc + (d.valor || 0), 0);
     const newLog: ActivityFeed = {
       type: 'deal',
-      text: `Importados ${newDeals.length} negócios via Excel no valor total de ${new Intl.NumberFormat('pt-AO').format(totalVal)} Kz`,
+      text: `Importados ${uniqueNewDeals.length} negócios via Excel no valor total de ${new Intl.NumberFormat('pt-AO').format(totalVal)} Kz`,
       time: 'Agora'
     };
     setActivityFeed(prev => [newLog, ...prev]);
+
+    // 4. Push directly to local Express & Firestore database
+    const payload = {
+      comerciais,
+      clients: updatedClients,
+      visits,
+      deals: updatedDeals,
+      guidelines,
+      notifications,
+      activityFeed: [newLog, ...activityFeed],
+      arquivos,
+      crmName,
+      telSede
+    };
+    fetch('/api/crm-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(console.warn);
+    saveCrmDataToFirestore(payload).catch(console.warn);
+
     addNotification(
       'Importação Excel Concluída 📊',
-      `${newDeals.length} propostas foram distribuídas automaticamente por todas as 13 telas do CRM.`,
+      `${uniqueNewDeals.length} propostas importadas, gravadas no banco de dados e sincronizadas em todos os gráficos do CRM!`,
       'success'
     );
   };
 
   const handleImportClients = (newClients: Cliente[]) => {
-    setClients(prev => [...newClients, ...prev]);
+    if (!newClients || newClients.length === 0) return;
+    lastMutatedTimeRef.current = Date.now();
+
+    const existingNames = new Set(clients.map(c => (c.nome || c.empresa || '').toLowerCase().trim()));
+    const uniqueClients = newClients.filter(c => {
+      const cName = (c.nome || c.empresa || '').trim();
+      return cName && !existingNames.has(cName.toLowerCase());
+    });
+
+    const updatedClients = [...uniqueClients, ...clients];
+    setClients(updatedClients);
+    saveToLocalStorage('gpa_clients', updatedClients);
+
     const newLog: ActivityFeed = {
       type: 'client',
-      text: `Importados ${newClients.length} novos clientes via Excel`,
+      text: `Importados ${uniqueClients.length} novos clientes via Excel`,
       time: 'Agora'
     };
     setActivityFeed(prev => [newLog, ...prev]);
+
+    const payload = {
+      comerciais,
+      clients: updatedClients,
+      visits,
+      deals,
+      guidelines,
+      notifications,
+      activityFeed: [newLog, ...activityFeed],
+      arquivos,
+      crmName,
+      telSede
+    };
+    fetch('/api/crm-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.warn);
+    saveCrmDataToFirestore(payload).catch(console.warn);
+
     addNotification(
       'Clientes Importados 👥',
-      `${newClients.length} clientes foram adicionados à base de dados do CRM.`,
+      `${uniqueClients.length} clientes gravados com sucesso na base de dados.`,
       'success'
     );
   };
 
   const handleImportVisits = (newVisits: Visita[]) => {
-    setVisits(prev => [...newVisits, ...prev]);
+    if (!newVisits || newVisits.length === 0) return;
+    lastMutatedTimeRef.current = Date.now();
+
+    const existingIds = new Set(visits.map(v => v.id));
+    const uniqueVisits = newVisits.filter(v => !existingIds.has(v.id));
+
+    const updatedVisits = [...uniqueVisits, ...visits];
+    setVisits(updatedVisits);
+    saveToLocalStorage('gpa_visits', updatedVisits);
+
     const newLog: ActivityFeed = {
       type: 'visit',
-      text: `Importadas ${newVisits.length} visitas via Excel`,
+      text: `Importadas ${uniqueVisits.length} visitas via Excel`,
       time: 'Agora'
     };
     setActivityFeed(prev => [newLog, ...prev]);
+
+    const payload = {
+      comerciais,
+      clients,
+      visits: updatedVisits,
+      deals,
+      guidelines,
+      notifications,
+      activityFeed: [newLog, ...activityFeed],
+      arquivos,
+      crmName,
+      telSede
+    };
+    fetch('/api/crm-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.warn);
+    saveCrmDataToFirestore(payload).catch(console.warn);
+
     addNotification(
       'Visitas Importadas 📅',
-      `${newVisits.length} registos de visitas foram carregados no sistema.`,
+      `${uniqueVisits.length} registos de visitas gravados no banco de dados.`,
       'success'
     );
   };
 
   const handleImportRelatorios = (newRelatorios: any[]) => {
+    if (!newRelatorios || newRelatorios.length === 0) return;
+    lastMutatedTimeRef.current = Date.now();
+
     const novos: RelatorioDiario[] = newRelatorios.map((row, idx) => ({
       id: Date.now().toString() + idx,
       data: row.dataEnvio || new Date().toISOString().split('T')[0],
       semana: row.semana || 'Semana Atual',
       comercialNome: row.comercial || 'Comercial',
       actividadeEquipa: [{ comercialNome: row.comercial || 'Comercial', resumo: row.resumo || 'Importado via Excel' }],
-      pipelineTotal: typeof row.totalPipeline === 'number' ? row.totalPipeline : 0,
+      pipelineTotal: typeof row.totalPipeline === 'number' ? row.totalPipeline : (Number(row.valor) || 0),
       pipelineDestaques: [],
       visitasRealizadas: [],
       propostasEmitidasCount: 0,
@@ -1908,20 +2093,39 @@ export default function App() {
     }));
     
     setRelatoriosDiarios(prev => [...novos, ...prev]);
+
+    // Also convert them to deals so they are graphed in CRM
+    const convertedDeals: Deal[] = newRelatorios.map((r, idx) => ({
+      id: 'rel_d_' + Date.now() + '_' + idx,
+      clienteNome: r.clienteNome || r.comercial || 'Cliente GPA',
+      empresa: r.empresa || 'GPA Angola',
+      titulo: r.titulo || `Relatório Semanal (${r.semana || 'Atual'})`,
+      valor: Number(r.pipelineTotal) || Number(r.valor) || 0,
+      valorAprovado: Number(r.valorAprovado) || 0,
+      valorPerdido: Number(r.valorPerdido) || 0,
+      etapa: (r.etapa as any) || 'fechado',
+      comercialId: r.comercialId || loggedUser?.id || 'u1',
+      comercialNome: r.comercial || loggedUser?.nome || 'Comercial GPA',
+      prioridade: 'Alta',
+      diasAberto: 1,
+      semana: r.semana,
+      probabilidade: '100%',
+      dataEnvio: r.data || new Date().toISOString().split('T')[0],
+      observacoes: r.resumo || 'Importado via Relatório Excel'
+    }));
+
+    handleImportDeals(convertedDeals);
+
     addNotification(
       'Relatórios Importados 📝',
-      `${newRelatorios.length} relatórios foram carregados no sistema.`,
+      `${newRelatorios.length} relatórios carregados e sincronizados nos gráficos.`,
       'success'
     );
   };
 
   const handleImportAnaliseCritica = (newDeals: any[]) => {
-    setDeals(prev => [...newDeals, ...prev]);
-    addNotification(
-      'Análise Crítica Atualizada 📈',
-      `${newDeals.length} negócios para análise crítica importados.`,
-      'success'
-    );
+    if (!newDeals || newDeals.length === 0) return;
+    handleImportDeals(newDeals as Deal[]);
   };
 
   const handleAddUserSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -2496,23 +2700,33 @@ export default function App() {
   }
 
   return (
-    <div className={`flex h-screen overflow-hidden font-sans relative ${themeMode === 'dark' ? 'bg-[#070b14] text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
-      {/* Structural Tech Grid Background */}
-      <div className="absolute inset-0 bg-tech-grid opacity-15 pointer-events-none z-0"></div>
+    <div className={`flex h-screen overflow-hidden font-sans relative ${themeMode === 'dark' ? 'bg-[#060a12] text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
       
       {/* Global Animated Video Background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <video 
+          ref={mainVideoRef}
           autoPlay 
           loop 
           muted 
           playsInline 
           preload="auto"
-          className="w-full h-full object-cover opacity-15 mix-blend-screen"
+          poster="/videos/Gemini_Generated_Image_7bund77bund77bun.png"
+          className={`w-full h-full object-cover scale-105 filter saturate-125 contrast-105 transition-opacity duration-500 ${
+            themeMode === 'dark' ? 'opacity-45' : 'opacity-20'
+          }`}
         >
           <source src={bgVideo} type="video/mp4" />
           <source src="/videos/Prompt_Direto_e_Suave_Reco.mp4" type="video/mp4" />
         </video>
+        
+        {/* Soft Ambient Overlay for Readability */}
+        <div className={`absolute inset-0 pointer-events-none ${
+          themeMode === 'dark' 
+            ? 'bg-gradient-to-b from-[#060a12]/75 via-[#060a12]/55 to-[#060a12]/80' 
+            : 'bg-gradient-to-b from-white/70 via-slate-100/50 to-white/75'
+        }`} />
+        <div className="absolute inset-0 bg-tech-grid opacity-25 pointer-events-none"></div>
       </div>
       
       {/* Floating Chat Message Toast Banner */}
@@ -2562,21 +2776,7 @@ export default function App() {
       />
 
       {/* Main viewport area */}
-      <div className={`flex-grow flex flex-col overflow-hidden relative z-10 ${themeMode === 'dark' ? 'bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.96),rgba(10,16,35,0.92))]' : 'bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.10),transparent_25%),linear-gradient(135deg,#f8fafc_0%,#eef4ff_60%,#f8fafc_100%)]'}`}>
-        
-        {/* Global Ambient Background Video Layer */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-20">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full h-full object-cover filter blur-[1px]"
-          >
-            <source src={bgVideo} type="video/mp4" />
-          </video>
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/60 to-slate-950/90" />
-        </div>
+      <div className={`flex-grow flex flex-col overflow-hidden relative z-10 ${themeMode === 'dark' ? 'bg-transparent' : 'bg-white/40'}`}>
         
         {/* Structural Topbar */}
         <TopBar
@@ -2587,7 +2787,7 @@ export default function App() {
           onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
           deals={deals}
           clients={clients}
-          comerciais={comerciais}
+          comerciais={onlyComerciais}
           notifications={notifications}
           onRemoveNotification={(id) => setNotifications(prev => prev.filter(n => n.id !== id))}
           onClearNotifications={() => setNotifications([])}
@@ -2601,7 +2801,7 @@ export default function App() {
         <div className="flex-grow overflow-y-auto p-3 sm:p-5 md:p-6 w-full space-y-6">
           {activeTab === 'dashboard' && (
             <DashboardView
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               deals={deals}
               clients={clients}
               guidelines={guidelines}
@@ -2642,7 +2842,7 @@ export default function App() {
           {activeTab === 'agenda' && (
             <AgendaView
               clients={clients}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               visits={visits}
               onOpenScheduleVisit={() => setIsScheduleVisitOpen(true)}
               onEditSchedule={(c) => {
@@ -2656,7 +2856,7 @@ export default function App() {
           {activeTab === 'clientes' && (
             <ClientesView
               clients={clients}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               onOpenAddClient={() => setIsAddClientOpen(true)}
               onOpenEditClient={(c) => {
                 setSelectedClientForEdit(c);
@@ -2680,7 +2880,7 @@ export default function App() {
           {activeTab === 'visitas' && (
             <VisitasView
               visits={visits}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               onOpenAddVisit={() => setIsAddVisitOpen(true)}
               onEditVisit={(v) => {
                 setSelectedVisitForEdit(v);
@@ -2728,7 +2928,7 @@ export default function App() {
               </div>
               <CrmKanbanView
                 deals={deals}
-                comerciais={comerciais}
+                comerciais={onlyComerciais}
                 onOpenAddDeal={() => setIsAddDealOpen(true)}
                 onMoveDeal={handleMoveDeal}
                 onDeleteDeal={handleDeleteDeal}
@@ -2749,7 +2949,7 @@ export default function App() {
           {activeTab === 'recomendacoes' && (
             <RecomendacoesView
               deals={deals}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               loggedUser={loggedUser}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
@@ -2766,7 +2966,7 @@ export default function App() {
 
           {activeTab === 'metas' && (
             <MetasPerformanceView
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               deals={deals}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
@@ -2783,7 +2983,7 @@ export default function App() {
 
           {activeTab === 'metas_comissoes' && (
             <MetasComissoesView
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               deals={deals}
               loggedUser={loggedUser}
               onUpdateMetaUser={handleUpdateMetaUser}
@@ -2804,7 +3004,7 @@ export default function App() {
           {activeTab === 'comparativo' && (
             <ComparativoSemanalView
               deals={deals}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
               selectedPeriod={globalPeriodType}
@@ -2829,7 +3029,7 @@ export default function App() {
 
           {activeTab === 'listas' && (
             <ListasView
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
               selectedPeriod={globalPeriodType}
@@ -2848,7 +3048,7 @@ export default function App() {
               deals={deals}
               onAddDeal={handleAddDeal}
               loggedUser={loggedUser}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               onLogOperation={logOperation}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
@@ -2867,7 +3067,7 @@ export default function App() {
             <HistoricoDiaView
               operacoesLog={operacoesLog}
               loggedUser={loggedUser}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               onRevertOperation={handleRevertOperation}
               onClearOperacoesLog={handleClearOperacoesLog}
               refDate={globalRefDate}
@@ -2886,7 +3086,7 @@ export default function App() {
           {activeTab === 'analise_critica' && (
             <AnaliseCriticaView
               deals={deals}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               refDate={globalRefDate}
               onRefDateChange={setGlobalRefDate}
               selectedPeriod={globalPeriodType}
@@ -2905,7 +3105,7 @@ export default function App() {
               arquivos={arquivos}
               clients={clients}
               deals={deals}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               loggedUser={loggedUser}
               onUploadFile={handleUploadFile}
               onUpdateFile={handleUpdateFile}
@@ -2927,7 +3127,7 @@ export default function App() {
           {activeTab === 'relatorios' && (
             <RelatoriosView
               deals={deals}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
               relatoriosDiarios={relatoriosDiarios}
               historicoSemanas={historicoSemanas}
               historicoMeses={historicoMeses}
@@ -3005,104 +3205,54 @@ export default function App() {
                       String(p.servico).toLowerCase().trim() === String(np.servico).toLowerCase().trim()
                     );
                     if (existingIdx >= 0) {
-                      // Substitui com os dados reais atualizados do Excel
                       updated[existingIdx] = { ...updated[existingIdx], ...np };
                     } else {
-                      // Adiciona a nova linha do Excel
                       updated.unshift(np);
                     }
                   });
 
                   localStorage.setItem('gpa_base_duas_semanas', JSON.stringify(updated));
-                  window.dispatchEvent(new Event('storage'));
 
-                  // Sync immediately to server database & Supabase cloud so all users see it permanently
-                  const payload = {
-                    comerciais, clients, visits, deals, guidelines, notifications, activityFeed, arquivos, crmName, telSede,
-                    baseDuasSemanas: updated
-                  };
-                  fetch('/api/crm-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                  }).catch(console.error);
-                  saveCrmDataToFirestore(payload).catch(console.error);
+                  // Convert propostas to deals so they are visible in charts & CRM
+                  const convertedDeals: Deal[] = newPropostas.map((p, idx) => {
+                    const valNum = parseFloat(String(p.valorProposta || '0').replace(/[^\d,-]/g, '').replace(',', '.')) || 0;
+                    const valAp = parseFloat(String(p.valorAprovado || '0').replace(/[^\d,-]/g, '').replace(',', '.')) || 0;
+                    const valPer = parseFloat(String(p.valorPerdido || '0').replace(/[^\d,-]/g, '').replace(',', '.')) || 0;
+                    const st = String(p.estadoProposta || '').toLowerCase();
+                    const etapa = st.includes('aprov') ? 'fechado' : st.includes('perdid') ? 'perdido' : st.includes('negoc') ? 'negociacao' : 'proposta';
+
+                    const commMatch = comerciais.find(c => c.nome.toLowerCase().includes(String(p.gestorComercial || '').toLowerCase())) || comerciais[0];
+
+                    return {
+                      id: `prop_deal_${Date.now()}_${idx}`,
+                      clienteNome: p.cliente || 'Cliente GPA',
+                      empresa: p.cliente || 'GPA Angola',
+                      titulo: p.servico || 'Proposta Comercial',
+                      valor: valNum || 1500000,
+                      valorAprovado: etapa === 'fechado' ? (valAp || valNum) : undefined,
+                      valorPerdido: etapa === 'perdido' ? (valPer || valNum) : undefined,
+                      etapa: etapa as Deal['etapa'],
+                      comercialId: commMatch?.id || 'u1',
+                      comercialNome: p.gestorComercial || commMatch?.nome || 'Comercial GPA',
+                      prioridade: valNum > 5000000 ? 'Alta' : 'Normal',
+                      diasAberto: 1,
+                      semana: p.semana || 'Atual',
+                      dataEnvio: p.dataEnvio || new Date().toISOString().split('T')[0],
+                      observacoes: p.observacoes || 'Importado via Configurações'
+                    };
+                  });
+
+                  handleImportDeals(convertedDeals);
                 } catch (e) { console.error(e); }
               }}
               onImportClientes={(newClientes) => {
-                setClients(prev => {
-                  const updated = [...prev];
-                  newClientes.forEach(nc => {
-                    const existingIdx = updated.findIndex(c =>
-                      (c.nif && nc.nif && String(c.nif) === String(nc.nif)) ||
-                      (c.empresa && nc.empresa && String(c.empresa).toLowerCase().trim() === String(nc.empresa).toLowerCase().trim())
-                    );
-                    if (existingIdx >= 0) {
-                      updated[existingIdx] = { ...updated[existingIdx], ...nc };
-                    } else {
-                      updated.unshift(nc as any);
-                    }
-                  });
-                  saveToLocalStorage('gpa_clients', updated);
-                  // Sync to server
-                  fetch('/api/crm-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ clients: updated })
-                  }).catch(console.error);
-                  return updated;
-                });
+                handleImportClients(newClientes as Cliente[]);
               }}
               onImportVisitas={(newVisitas) => {
-                setVisits(prev => {
-                  const updated = [...prev];
-                  newVisitas.forEach(nv => {
-                    const existingIdx = updated.findIndex(v =>
-                      v.clienteNome && nv.clienteNome &&
-                      String(v.clienteNome).toLowerCase().trim() === String(nv.clienteNome).toLowerCase().trim() &&
-                      v.data && nv.data && String(v.data) === String(nv.data)
-                    );
-                    if (existingIdx >= 0) {
-                      updated[existingIdx] = { ...updated[existingIdx], ...nv };
-                    } else {
-                      updated.unshift(nv as any);
-                    }
-                  });
-                  saveToLocalStorage('gpa_visits', updated);
-                  // Sync to server
-                  fetch('/api/crm-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ visits: updated })
-                  }).catch(console.error);
-                  return updated;
-                });
+                handleImportVisits(newVisitas as Visita[]);
               }}
               onImportDeals={(newDeals) => {
-                setDeals(prev => {
-                  const updated = [...prev];
-                  newDeals.forEach(nd => {
-                    const existingIdx = updated.findIndex(d =>
-                      d.clienteNome && nd.clienteNome &&
-                      String(d.clienteNome).toLowerCase().trim() === String(nd.clienteNome).toLowerCase().trim() &&
-                      d.titulo && nd.titulo &&
-                      String(d.titulo).toLowerCase().trim() === String(nd.titulo).toLowerCase().trim()
-                    );
-                    if (existingIdx >= 0) {
-                      updated[existingIdx] = { ...updated[existingIdx], ...nd };
-                    } else {
-                      updated.unshift(nd as any);
-                    }
-                  });
-                  saveToLocalStorage('gpa_deals', updated);
-                  // Sync to server — critical so all tabs and server see same data
-                  fetch('/api/crm-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deals: updated })
-                  }).catch(console.error);
-                  return updated;
-                });
+                handleImportDeals(newDeals as Deal[]);
               }}
               onLogOperation={logOperation}
             />
@@ -3113,7 +3263,7 @@ export default function App() {
               loggedUser={loggedUser}
               deals={deals}
               clients={clients}
-              comerciais={comerciais}
+              comerciais={onlyComerciais}
             />
           )}
 
@@ -3783,6 +3933,45 @@ export default function App() {
           onApproveProposal={handleApproveProposalFromPortal}
           onRequestRevision={handleRequestRevisionFromPortal}
         />
+      )}
+
+      {/* Floating Chat & Call Notification Toast */}
+      {chatToast && (
+        <div className="fixed bottom-6 right-6 z-[9999] max-w-sm w-full bg-slate-950/95 text-white p-4 rounded-3xl border-2 border-amber-400 shadow-2xl shadow-amber-500/40 backdrop-blur-2xl animate-bounce">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center font-black text-white text-lg shadow-lg">
+                💬
+              </div>
+              <div>
+                <p className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                  Nova mensagem de {chatToast.senderName}
+                </p>
+                <p className="text-[11px] text-slate-200 truncate max-w-[200px] mt-0.5 font-medium">
+                  {chatToast.text}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setChatToast(null)}
+              className="text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={() => {
+                setActiveTab('chat');
+                setChatToast(null);
+              }}
+              className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Abrir Conversa</span> →
+            </button>
+          </div>
+        </div>
       )}
 
     </div>

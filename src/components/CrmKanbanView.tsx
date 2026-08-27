@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Deal, Usuario } from '../types';
+import { Deal, Usuario, isPureAdminUser, isUserCommercial } from '../types';
 import { Plus, ArrowLeft, ArrowRight, TrendingUp, Filter, Search, BarChart3, PieChart, Layers, Phone, CheckCircle2, AlertCircle, Award, Sparkles, Building2, ChevronDown, ChevronUp, Trash2, BrainCircuit, GitFork, Info } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 import { calculateDealScore } from '../lib/predictiveScoring';
@@ -93,10 +93,11 @@ export default function CrmKanbanView({
     return sum + (d.valor || 0) * prob;
   }, 0);
 
-  // Grouping by commercial for the Commercial Performance chart
+  // Grouping by commercial for the Commercial Performance chart (Excluding Admins)
   const commercialMap: Record<string, { total: number; count: number; fechados: number }> = {};
   filteredDeals.forEach(d => {
     const cName = d.comercialNome || 'Sem Atribuição';
+    if (isPureAdminUser(cName)) return;
     if (!commercialMap[cName]) {
       commercialMap[cName] = { total: 0, count: 0, fechados: 0 };
     }
@@ -264,7 +265,7 @@ export default function CrmKanbanView({
               className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 focus:outline-none"
             >
               <option value="Todos">👤 Todos Comerciais</option>
-              {comerciais.map(u => (
+              {comerciais.filter(isUserCommercial).map(u => (
                 <option key={u.id} value={u.nome}>{u.nome}</option>
               ))}
             </select>
