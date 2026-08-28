@@ -174,7 +174,7 @@ const CRM_DB_FILE = path.join(process.cwd(), "crm-db.json");
 
 // Real-time Chat & Calling Serverless/Server API Endpoints for Vercel & Node
 const CHAT_MESSAGES_FILE = process.env.VERCEL ? "/tmp/chat-messages-db.json" : path.join(process.cwd(), "chat-messages-db.json");
-let inMemoryChatMessages: any[] = [];
+let memoryChatMessages: any[] = [];
 
 async function loadServerChatMessages(): Promise<any[]> {
   try {
@@ -184,22 +184,25 @@ async function loadServerChatMessages(): Promise<any[]> {
       .eq('id', 'gpa_angola_chat_messages')
       .single();
     if (data && data.payload && Array.isArray(data.payload)) {
+      memoryChatMessages = data.payload;
       return data.payload;
     }
   } catch (e) {
     console.warn("Error loading chat messages from Supabase:", e);
   }
-  return [];
+  return memoryChatMessages;
 }
 
 async function saveServerChatMessages(msgs: any[]) {
+  memoryChatMessages = msgs.slice(-500);
   try {
-    await supabaseServer.from('crm_data').upsert({
+    const { error } = await supabaseServer.from('crm_data').upsert({
       id: 'gpa_angola_chat_messages',
-      payload: msgs.slice(-500)
+      payload: memoryChatMessages
     });
+    if (error) console.error("Error saving chat messages to Supabase:", error);
   } catch (e) {
-    console.warn("Error saving chat messages to Supabase:", e);
+    console.error("Supabase upsert error:", e);
   }
 }
 

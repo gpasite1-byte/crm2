@@ -771,6 +771,47 @@ export default function ChatView({ loggedUser, comerciais, onLogOperation, onAdd
     let reconnectTimer: any = null;
     let isCancelled = false;
 
+    const handleRealtimeEvent = (type: string, payload: any) => {
+      if (!type) return;
+
+      if (type === 'PRESENCE_HEARTBEAT' && payload) {
+        setOnlinePresence(prev => ({
+          userIds: new Set([...prev.userIds, payload.userId || ''].filter(Boolean)),
+          emails: new Set([...prev.emails, (payload.email || '').toLowerCase()].filter(Boolean)),
+          names: new Set([...prev.names, (payload.nome || '').toLowerCase()].filter(Boolean))
+        }));
+      }
+      if (type === 'PRESENCE_OFFLINE' && payload) {
+        setOnlinePresence(prev => {
+          const nextU = new Set(prev.userIds);
+          const nextE = new Set(prev.emails);
+          const nextN = new Set(prev.names);
+          if (payload.userId && payload.userId !== loggedUser.id) nextU.delete(payload.userId);
+          if (payload.email && payload.email !== loggedUser.email) nextE.delete(payload.email.toLowerCase());
+          if (payload.nome && payload.nome !== loggedUser.nome) nextN.delete(payload.nome.toLowerCase());
+          return { userIds: nextU, emails: nextE, names: nextN };
+        });
+      }
+
+      if (type === 'NEW_MESSAGE' && payload) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === payload.id)) return prev;
+          if (payload.senderId !== loggedUser.id) playNotificationPing();
+          return [...prev, payload];
+        });
+        if (payload.channelId !== activeChannelId && payload.senderId !== loggedUser.id) {
+          setChannels(prev => prev.map(c => c.id === payload.channelId ? { ...c, unreadCount: (c.unreadCount || 0) + 1 } : c));
+        }
+      }
+
+      if (type === 'INCOMING_CALL' && payload) processIncomingCallSignal(payload);
+      if (type === 'ACCEPT_CALL' && payload) processAcceptCallSignal(payload);
+      if ((type === 'REJECT_CALL' || type === 'END_CALL') && payload) processEndOrRejectCallSignal(payload);
+      if (type === 'REACTION_UPDATE' && payload) {
+        setMessages(prev => prev.map(m => m.id === payload.msgId ? { ...m, reactions: payload.reactions } : m));
+      }
+    };
+
     const connectWS = () => {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -782,44 +823,7 @@ export default function ChatView({ loggedUser, comerciais, onLogOperation, onAdd
           try {
             const data = JSON.parse(event.data);
             const { type, payload } = data || {};
-            if (!type) return;
-
-            if (type === 'PRESENCE_HEARTBEAT' && payload) {
-              setOnlinePresence(prev => ({
-                userIds: new Set([...prev.userIds, payload.userId || ''].filter(Boolean)),
-                emails: new Set([...prev.emails, (payload.email || '').toLowerCase()].filter(Boolean)),
-                names: new Set([...prev.names, (payload.nome || '').toLowerCase()].filter(Boolean))
-              }));
-            }
-            if (type === 'PRESENCE_OFFLINE' && payload) {
-              setOnlinePresence(prev => {
-                const nextU = new Set(prev.userIds);
-                const nextE = new Set(prev.emails);
-                const nextN = new Set(prev.names);
-                if (payload.userId && payload.userId !== loggedUser.id) nextU.delete(payload.userId);
-                if (payload.email && payload.email !== loggedUser.email) nextE.delete(payload.email.toLowerCase());
-                if (payload.nome && payload.nome !== loggedUser.nome) nextN.delete(payload.nome.toLowerCase());
-                return { userIds: nextU, emails: nextE, names: nextN };
-              });
-            }
-
-            if (type === 'NEW_MESSAGE' && payload) {
-              setMessages(prev => {
-                if (prev.some(m => m.id === payload.id)) return prev;
-                if (payload.senderId !== loggedUser.id) playNotificationPing();
-                return [...prev, payload];
-              });
-              if (payload.channelId !== activeChannelId && payload.senderId !== loggedUser.id) {
-                setChannels(prev => prev.map(c => c.id === payload.channelId ? { ...c, unreadCount: (c.unreadCount || 0) + 1 } : c));
-              }
-            }
-
-            if (type === 'INCOMING_CALL' && payload) processIncomingCallSignal(payload);
-            if (type === 'ACCEPT_CALL' && payload) processAcceptCallSignal(payload);
-            if ((type === 'REJECT_CALL' || type === 'END_CALL') && payload) processEndOrRejectCallSignal(payload);
-            if (type === 'REACTION_UPDATE' && payload) {
-              setMessages(prev => prev.map(m => m.id === payload.msgId ? { ...m, reactions: payload.reactions } : m));
-            }
+            handleRealtimeEvent(type, payload);
           } catch (err) {}
         };
 
@@ -830,10 +834,33 @@ export default function ChatView({ loggedUser, comerciais, onLogOperation, onAdd
     };
 
     connectWS();
+
+    // Attach Pusher bindings
+    if (pusherClient) {
+      const channel = pusherClient.subscribe('gpa-crm-channel');
+      const events = ['PRESENCE_HEARTBEAT', 'PRESENCE_OFFLINE', 'NEW_MESSAGE', 'INCOMING_CALL', 'ACCEPT_CALL', 'REJECT_CALL', 'END_CALL', 'REACTION_UPDATE'];
+      events.forEach(evt => {
+        channel.bind(evt, (payload: any) => {
+          handleRealtimeEvent(evt, payload);
+        });
+      });
+    }
+
+    // Attach Ably bindings
+    let ablyChannel: any = null;
+    if (ablyClient) {
+      ablyChannel = ablyClient.channels.get('gpa-crm-channel');
+      ablyChannel.subscribe((message: any) => {
+        handleRealtimeEvent(message.name, message.data);
+      });
+    }
+
     return () => {
       isCancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (ws) ws.close();
+      if (pusherClient) pusherClient.unsubscribe('gpa-crm-channel');
+      if (ablyChannel) ablyChannel.unsubscribe();
     };
   }, [loggedUser.id, activeChannelId]);
 

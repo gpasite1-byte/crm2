@@ -2131,6 +2131,28 @@ export default function App() {
     handleImportDeals(newDeals as Deal[]);
   };
 
+  const handleImportPropostas = (newPropostas: any[]) => {
+    if (!newPropostas || newPropostas.length === 0) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]');
+      const merged = [...existing, ...newPropostas];
+      const unique = merged.reduce((acc: any[], current: any) => {
+        const x = acc.find(item => item.cliente === current.cliente && item.servico === current.servico && item.semana === current.semana);
+        if (!x) return acc.concat([current]);
+        return acc;
+      }, []);
+      localStorage.setItem('gpa_base_duas_semanas', JSON.stringify(unique));
+      window.dispatchEvent(new Event('storage'));
+      addNotification(
+        'Base de Propostas Atualizada',
+        `${newPropostas.length} novas propostas importadas com sucesso.`,
+        'success'
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleAddUserSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -3869,6 +3891,7 @@ export default function App() {
         onImportVisits={handleImportVisits}
         onImportRelatorios={handleImportRelatorios}
         onImportAnaliseCritica={handleImportAnaliseCritica}
+        onImportPropostas={handleImportPropostas}
         currentDeals={deals}
         currentClients={clients}
         currentVisits={visits}
