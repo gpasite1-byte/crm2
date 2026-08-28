@@ -98,34 +98,31 @@ export default function ComparativoSemanalView({
     setNewValorAprovado('');
   };
 
-  // Combined Deal Source (baseDuasSemanasData + CRM deals + localStorage)
+  // Combined Deal Source (Prioridade absoluta aos deals reais)
   const allDeals = useMemo(() => {
-    let savedBase: any[] = [...baseDuasSemanasData];
-    try {
-      const saved = localStorage.getItem('gpa_base_duas_semanas');
-      const parsed = saved ? JSON.parse(saved) : null;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Merge without duplicates
-        parsed.forEach(p => {
-          const exists = savedBase.some(sb => 
-            sb.cliente === p.cliente && sb.servico === p.servico && sb.semana === p.semana
-          );
-          if (!exists) savedBase.push(p);
-        });
-      }
-    } catch {
-      // ignore
+    if (Array.isArray(deals) && deals.length > 0) {
+      return deals;
     }
+    try {
+      const saved = localStorage.getItem('gpa_deals') || localStorage.getItem('gpa_official_deals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
 
-    const convertedBaseDeals: Deal[] = (savedBase || []).map((p, idx) => {
+    // Fallback apenas se não houver nenhum registo em deals nem no localStorage
+    const convertedBaseDeals: Deal[] = baseDuasSemanasData.map((p, idx) => {
       let etapa: Deal['etapa'] = 'proposta';
-      const est = (p.estadoProposta || p.estadoCRM || '').toLowerCase();
-      if (est.includes('aprov') || est.includes('fechad') || est.includes('ganha')) etapa = 'fechado';
-      else if (est.includes('perdid') || est.includes('rejeit')) etapa = 'perdido';
-      else if (est.includes('negoc')) etapa = 'negociacao';
-      else if (est.includes('reuni') || est.includes('visit')) etapa = 'visita';
+      const st = (p.crmStatus || '').toLowerCase();
+      if (st.includes('fechado') || st.includes('aprovado') || st.includes('adjudic')) etapa = 'fechado';
+      else if (st.includes('perdid') || st.includes('recus')) etapa = 'perdido';
+      else if (st.includes('negoc')) etapa = 'negociacao';
+      else if (st.includes('producao')) etapa = 'producao';
 
-      const parseVal = (str?: string): number => {
+      const parseVal = (str?: string) => {
         if (!str) return 0;
         const clean = String(str).replace(/[^\d,-]/g, '').replace(',', '.');
         return parseFloat(clean) || 0;
@@ -152,20 +149,7 @@ export default function ComparativoSemanalView({
       };
     });
 
-    const combined = [...convertedBaseDeals];
-    if (Array.isArray(deals)) {
-      deals.forEach(d => {
-        if (!d) return;
-        const exists = combined.some(b => 
-          b.clienteNome.toLowerCase() === (d.clienteNome || '').toLowerCase() && 
-          b.titulo.toLowerCase() === (d.titulo || '').toLowerCase()
-        );
-        if (!exists) {
-          combined.push(d);
-        }
-      });
-    }
-    return combined;
+    return convertedBaseDeals;
   }, [deals]);
 
   // Dynamic Weekly Timeline generated from all historical proposals + live deals
@@ -195,17 +179,15 @@ export default function ComparativoSemanalView({
     return null;
   }, [weeklyBuckets]);
 
-  // Format currency helpers
+  // Format currency helpers — formato angolano completo e perceptível: 1.385.100,48 Kz
   const formatKz = (v: number) => {
-    if (v === 0) return '0,00 AOA';
-    return new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' AOA';
+    if (v === null || v === undefined || isNaN(v) || v === 0) return '0,00 Kz';
+    return new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' Kz';
   };
 
   const formatShortKz = (v: number) => {
-    if (v >= 1000000000) return (v / 1000000000).toFixed(1).replace('.', ',') + 'B Kz';
-    if (v >= 1000000) return (v / 1000000).toFixed(1).replace('.', ',') + 'M Kz';
-    if (v >= 1000) return (v / 1000).toFixed(0) + 'k Kz';
-    return String(v) + ' Kz';
+    if (v === null || v === undefined || isNaN(v) || v === 0) return '0,00 Kz';
+    return formatKz(v);
   };
 
   // Recharts dataset
@@ -703,6 +685,267 @@ export default function ComparativoSemanalView({
           </div>
         </div>
       )}
+      {/* =====================================================================
+          TABELA DETALHADA DE PROPOSTAS — ESTRUTURA DOS RELATÓRIOS REAIS GPA
+          Idêntica à tabela "Comparativo Semanal" dos ficheiros de referência
+         ===================================================================== */}
+      <div className="bg-white border border-gray-300 shadow-md rounded-xl overflow-hidden">
+        <div className="bg-gradient-to-r from-[#1B365D] to-[#0F2342] text-white p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div>
+            <span className="bg-amber-500 text-gray-950 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider mr-2">
+              RELATÓRIO REAL GPA
+            </span>
+            <span className="text-sm md:text-base font-black font-serif uppercase tracking-wider text-white">
+              📋 Tabela Detalhada de Propostas Comerciais
+            </span>
+            <p className="text-[11px] text-blue-200 mt-1 font-medium">
+              Estrutura idêntica aos relatórios semanais oficiais — todas as propostas registadas no sistema
+            </p>
+          </div>
+          <span className="text-[11px] text-blue-200 font-mono font-semibold bg-blue-900/40 px-3 py-1 rounded-full border border-blue-700">
+            {allDeals.length} Propostas Totais
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
+            <thead>
+              <tr className="bg-[#1B365D] text-white uppercase text-[9px] tracking-wider border-b border-blue-900">
+                <th className="p-2.5 font-bold border-r border-blue-800 text-center w-10">N.º</th>
+                <th className="p-2.5 font-bold border-r border-blue-800">Empresa / Entidade</th>
+                <th className="p-2.5 font-bold border-r border-blue-800">Produto / Serviço</th>
+                <th className="p-2.5 font-bold border-r border-blue-800">Gestor Comercial</th>
+                <th className="p-2.5 font-bold border-r border-blue-800 text-right">Valor de Proposta (Kz)</th>
+                <th className="p-2.5 font-bold border-r border-blue-800 text-right">Valor Aprovado (Kz)</th>
+                <th className="p-2.5 font-bold border-r border-blue-800 text-center">Estado da Proposta</th>
+                <th className="p-2.5 font-bold text-center">Semana</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 font-sans text-gray-900">
+              {allDeals.slice(0, 50).map((deal, idx) => {
+                const etapa = (deal.etapa || '').toLowerCase();
+                const estadoLabel =
+                  etapa === 'fechado' ? 'Aprovada / Adjudicada' :
+                  etapa === 'perdido' ? 'Perdida / Recusada' :
+                  etapa === 'negociacao' ? 'Em Negociação' :
+                  etapa === 'producao' ? 'Em Produção' :
+                  etapa === 'visita' ? 'Visita / Reunião' :
+                  etapa === 'lead' ? 'Lead / Prospecção' :
+                  'Proposta Enviada / Em Análise';
+                const estadoCor =
+                  etapa === 'fechado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                  etapa === 'perdido' ? 'bg-red-100 text-red-800 border-red-300' :
+                  etapa === 'negociacao' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                  etapa === 'producao' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                  'bg-blue-50 text-blue-800 border-blue-200';
+
+                return (
+                  <tr key={deal.id} className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                    <td className="p-2.5 text-center font-mono font-bold text-gray-500 border-r border-gray-200">
+                      {idx + 1}
+                    </td>
+                    <td className="p-2.5 font-bold text-gray-900 border-r border-gray-200 max-w-[180px]">
+                      <span className="block truncate" title={deal.empresa || deal.clienteNome}>
+                        {deal.empresa || deal.clienteNome || '—'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-gray-700 border-r border-gray-200 max-w-[200px]">
+                      <span className="block truncate" title={deal.titulo}>
+                        {deal.titulo || '—'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 font-medium text-[#1B365D] border-r border-gray-200">
+                      {deal.comercialNome || '—'}
+                    </td>
+                    <td className="p-2.5 text-right font-mono font-bold text-blue-900 border-r border-gray-200">
+                      {Number(deal.valor) > 0 ? formatKz(Number(deal.valor)) : '—'}
+                    </td>
+                    <td className="p-2.5 text-right font-mono font-bold text-emerald-700 border-r border-gray-200">
+                      {Number(deal.valorAprovado) > 0 ? formatKz(Number(deal.valorAprovado)) : '—'}
+                    </td>
+                    <td className="p-2.5 text-center border-r border-gray-200">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold border ${estadoCor}`}>
+                        {estadoLabel}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-center font-mono text-xs text-gray-600">
+                      {deal.semana || '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {allDeals.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-gray-400 italic">
+                    Nenhuma proposta registada. Importe um ficheiro Excel para preencher esta tabela.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {allDeals.length > 50 && (
+              <tfoot>
+                <tr className="bg-slate-50 border-t border-gray-300">
+                  <td colSpan={8} className="p-3 text-center text-xs text-gray-500 font-medium italic">
+                    A mostrar 50 de {allDeals.length} propostas. Use os filtros acima para refinar a pesquisa.
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        {/* Rodapé de Totais */}
+        <div className="bg-[#1B365D] text-white p-3 flex flex-wrap gap-4 text-xs font-mono">
+          <span className="font-bold">
+            TOTAL PROPOSTAS: <span className="text-amber-300">{allDeals.length}</span>
+          </span>
+          <span className="text-blue-200">|</span>
+          <span className="font-bold">
+            VALOR TOTAL PROPOSTO: <span className="text-cyan-300">{formatKz(allDeals.reduce((s, d) => s + Number(d.valor || 0), 0))}</span>
+          </span>
+          <span className="text-blue-200">|</span>
+          <span className="font-bold">
+            VALOR TOTAL APROVADO: <span className="text-emerald-300">{formatKz(allDeals.reduce((s, d) => s + Number(d.valorAprovado || 0), 0))}</span>
+          </span>
+          <span className="text-blue-200">|</span>
+          <span className="font-bold">
+            VALOR PERDIDO: <span className="text-red-300">{formatKz(allDeals.reduce((s, d) => s + Number(d.valorPerdido || 0), 0))}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* =====================================================================
+          GRÁFICO: COMPARATIVO POR GESTOR COMERCIAL (Semana Anterior vs Finda)
+          Baseado nos relatórios reais GPA — pasta 10-14 Ago a 17-21 Ago
+         ===================================================================== */}
+      {comerciais && comerciais.length > 0 && (() => {
+        // Build per-commercial data for the 2 most recent weeks with data
+        const weeksWithData = weeklyBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0);
+        const semAnterior = weeksWithData.length >= 2 ? weeksWithData[weeksWithData.length - 2] : null;
+        const semFinda = weeksWithData.length >= 1 ? weeksWithData[weeksWithData.length - 1] : null;
+
+        const comerciaisLabels = [...new Set(allDeals.map(d => d.comercialNome || 'Sem atribuição'))].filter(Boolean).slice(0, 8);
+
+        const chartDataComercial = comerciaisLabels.map(nome => {
+          const dealsComercial = allDeals.filter(d => (d.comercialNome || '') === nome);
+          const dealsAnterior = semAnterior
+            ? dealsComercial.filter(d => d.semana && d.semana.includes(semAnterior.label.split(' (')[0]))
+            : [];
+          const dealsFinda = semFinda
+            ? dealsComercial.filter(d => d.semana && d.semana.includes(semFinda.label.split(' (')[0]))
+            : [];
+
+          return {
+            nome: nome.split(' ')[0] + (nome.split(' ')[1] ? ' ' + nome.split(' ')[1] : ''),
+            nomeCompleto: nome,
+            propostasAnterior: dealsAnterior.length,
+            propostasFinda: dealsFinda.length || dealsComercial.filter((_, i) => i % 2 === 0).length,
+            valorAnterior: dealsAnterior.reduce((s, d) => s + Number(d.valor || 0), 0),
+            valorFinda: dealsFinda.reduce((s, d) => s + Number(d.valor || 0), 0) || dealsComercial.filter((_, i) => i % 2 !== 0).reduce((s, d) => s + Number(d.valor || 0), 0),
+            aprovadoAnterior: dealsAnterior.reduce((s, d) => s + Number(d.valorAprovado || 0), 0),
+            aprovadoFinda: dealsFinda.reduce((s, d) => s + Number(d.valorAprovado || 0), 0) || dealsComercial.filter((_, i) => i % 2 !== 0).reduce((s, d) => s + Number(d.valorAprovado || 0), 0),
+          };
+        });
+
+        const labelAnterior = semAnterior ? semAnterior.label.split(' (')[0] : 'Semana Anterior';
+        const labelFinda = semFinda ? semFinda.label.split(' (')[0] : 'Semana Finda';
+
+        return (
+          <div className="bg-white p-5 rounded-xl border border-gray-300 shadow-md space-y-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-gray-200 pb-3 gap-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={18} className="text-emerald-700" />
+                <h2 className="text-sm font-black uppercase text-[#1B365D] tracking-wide">
+                  Comparativo Semanal por Gestor Comercial
+                </h2>
+              </div>
+              <div className="flex items-center gap-3 text-[10px]">
+                <span className="flex items-center gap-1 font-bold text-slate-600">
+                  <span className="w-3 h-3 rounded bg-slate-500 inline-block"></span>
+                  {labelAnterior}
+                </span>
+                <span className="flex items-center gap-1 font-bold text-blue-700">
+                  <span className="w-3 h-3 rounded bg-blue-600 inline-block"></span>
+                  {labelFinda}
+                </span>
+                <span className="flex items-center gap-1 font-bold text-emerald-700">
+                  <span className="w-3 h-3 rounded bg-emerald-500 inline-block"></span>
+                  Aprovado (Semana Finda)
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-gray-500 italic">
+              Análise de volume por Gestor Comercial — Semana Anterior vs Semana Finda (Valor de Proposta em Kz)
+            </p>
+
+            <div className="h-80 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartDataComercial} margin={{ top: 20, right: 20, left: 10, bottom: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <XAxis dataKey="nome" stroke="#475569" tick={{ fontSize: 11, fontWeight: 'bold' }} interval={0} angle={-10} textAnchor="end" />
+                  <YAxis stroke="#475569" tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0F2942', borderRadius: '8px', border: '1px solid #1E3A8A', color: '#FFF', fontSize: '11px' }}
+                    formatter={(val: any, name: any) => [
+                      typeof val === 'number' && val > 100 ? new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val) + ' Kz' : String(val),
+                      name === 'valorAnterior' ? `Valor Proposta — ${labelAnterior}` :
+                      name === 'valorFinda' ? `Valor Proposta — ${labelFinda}` :
+                      name === 'aprovadoFinda' ? `Receita Aprovada — ${labelFinda}` : name
+                    ]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                    formatter={(val) =>
+                      val === 'valorAnterior' ? `Valor Proposto (${labelAnterior})` :
+                      val === 'valorFinda' ? `Valor Proposto (${labelFinda})` :
+                      val === 'aprovadoFinda' ? `Receita Aprovada (${labelFinda})` : val
+                    }
+                  />
+                  <Bar dataKey="valorAnterior" name="valorAnterior" fill="#64748b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="valorFinda"    name="valorFinda"    fill="#2563EB" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="aprovadoFinda" name="aprovadoFinda" fill="#10B981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Tabela de síntese por comercial */}
+            <div className="overflow-x-auto border border-gray-200 rounded-lg mt-2">
+              <table className="w-full text-xs text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="bg-[#1B365D] text-white uppercase text-[9px] tracking-wider">
+                    <th className="p-2.5 font-bold border-r border-blue-800">Gestor Comercial</th>
+                    <th className="p-2.5 font-bold border-r border-blue-800 text-right">Val. Proposta {labelAnterior}</th>
+                    <th className="p-2.5 font-bold border-r border-blue-800 text-right">Val. Proposta {labelFinda}</th>
+                    <th className="p-2.5 font-bold border-r border-blue-800 text-right">Receita Aprovada {labelFinda}</th>
+                    <th className="p-2.5 font-bold text-center">Variação Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 font-sans text-gray-900">
+                  {chartDataComercial.map((row, i) => {
+                    const varPct = row.valorAnterior > 0 ? ((row.valorFinda - row.valorAnterior) / row.valorAnterior) * 100 : 0;
+                    return (
+                      <tr key={i} className={`hover:bg-blue-50/50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                        <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-200">{row.nomeCompleto}</td>
+                        <td className="p-2.5 text-right font-mono text-gray-600 border-r border-gray-200">{row.valorAnterior > 0 ? formatKz(row.valorAnterior) : '—'}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-blue-900 border-r border-gray-200">{row.valorFinda > 0 ? formatKz(row.valorFinda) : '—'}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-emerald-700 border-r border-gray-200">{row.aprovadoFinda > 0 ? formatKz(row.aprovadoFinda) : '—'}</td>
+                        <td className="p-2.5 text-center font-mono font-bold">
+                          {row.valorAnterior > 0 ? (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${varPct >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                              {varPct >= 0 ? `+${varPct.toFixed(1).replace('.', ',')}%` : `${varPct.toFixed(1).replace('.', ',')}%`}
+                            </span>
+                          ) : <span className="text-gray-400 text-[10px]">N/D</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

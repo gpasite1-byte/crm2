@@ -12,7 +12,9 @@ import {
   Layers,
   Users,
   Building2,
-  Calendar
+  Calendar,
+  FileText,
+  TrendingUp
 } from 'lucide-react';
 import { Deal, Cliente, Visita, Usuario } from '../types';
 import { extractFieldsFromRow } from '../utils/excelParser';

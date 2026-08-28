@@ -130,17 +130,19 @@ export default function DashboardView({
   }, [currentRange]);
 
   const allDeals = useMemo(() => {
-    let sourceDeals: Deal[] = deals && deals.length > 0 ? deals : officialExcelProposals;
+    if (Array.isArray(deals) && deals.length > 0) {
+      return deals;
+    }
     try {
-      const saved = localStorage.getItem('gpa_official_deals');
+      const saved = localStorage.getItem('gpa_deals') || localStorage.getItem('gpa_official_deals');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > sourceDeals.length) {
-          sourceDeals = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
       }
     } catch {}
-    return sourceDeals;
+    return officialExcelProposals;
   }, [deals]);
 
   const weeklyTimeline = useMemo(() => {
@@ -174,18 +176,18 @@ export default function DashboardView({
     );
   }, [allDeals, comerciais, refDate, currentRange, prevRange, selectedComercial, selectedEmpresa, selectedProvincia]);
 
+  // Formatação completa e percetível de dinheiro angolano: 1.385.100,48 Kz
   const formatKz = (v: number) => {
-    if (v === 0 || isNaN(v)) return '0,00 Kz';
-    return new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' Kz';
+    if (v === null || v === undefined || isNaN(v)) return '0,00 Kz';
+    return new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' Kz';
   };
 
   const formatShortKz = (v: number) => {
-    if (v === 0 || isNaN(v)) return '0 Kz';
-    if (v >= 1000000000) return (v / 1000000000).toFixed(2).replace('.', ',') + 'B Kz';
-    if (v >= 1000000) return (v / 1000000).toFixed(1).replace('.', ',') + 'M Kz';
-    if (v >= 1000) return (v / 1000).toFixed(0) + 'k Kz';
-    return String(v.toFixed(0)) + ' Kz';
+    if (v === null || v === undefined || isNaN(v) || v === 0) return '0,00 Kz';
+    return formatKz(v);
   };
+
+  const formatPct = (v: number) => `${(v || 0).toFixed(1).replace('.', ',')}%`;
 
   const handleSyncExcel = async () => {
     setIsSyncingExcel(true);
@@ -197,23 +199,61 @@ export default function DashboardView({
         setSyncStatusMsg(data.message || 'Dados do Relatório CRM GPA sincronizados com sucesso!');
         setTimeout(() => window.location.reload(), 1200);
       } else {
-        setSyncStatusMsg(`Sincronizado: Base de dados atualizada com 225 propostas oficiais.`);
+        setSyncStatusMsg(`Sincronizado: Base de dados atualizada com ${allDeals.length} propostas oficiais.`);
       }
     } catch (err: any) {
-      setSyncStatusMsg(`Base de dados oficial local ativa com 225 propostas.`);
+      setSyncStatusMsg(`Base de dados oficial local ativa com ${allDeals.length} propostas.`);
     } finally {
       setIsSyncingExcel(false);
     }
   };
 
-  // 1. DATA FOR CHART: Pipeline por Empresa do Grupo
+  // Semanas reais com dados para comparação de duas semanas
+  const weeksWithData = useMemo(() => {
+    const list = weeklyTimeline.filter(w => w.propostasCount > 0 || w.valorProposto > 0 || w.valorAprovado > 0);
+    if (list.length >= 2) return list;
+    if (list.length === 1) return [weeklyTimeline[0] || list[0], list[0]];
+    return weeklyTimeline.slice(0, 2);
+  }, [weeklyTimeline]);
+
+  const semAnterior = useMemo(() => {
+    if (weeksWithData.length >= 2) {
+      return weeksWithData[weeksWithData.length - 2];
+    }
+    return weeklyTimeline[weeklyTimeline.length - 2] || weeklyTimeline[0] || {
+      label: 'Semana Anterior',
+      propostasCount: 0,
+      valorProposto: 0,
+      valorAprovado: 0,
+      valorPerdido: 0,
+      forecast: 0,
+      conversaoPct: 0
+    };
+  }, [weeksWithData, weeklyTimeline]);
+
+  const semFinda = useMemo(() => {
+    if (weeksWithData.length >= 1) {
+      return weeksWithData[weeksWithData.length - 1];
+    }
+    return weeklyTimeline[weeklyTimeline.length - 1] || {
+      label: 'Semana Finda',
+      propostasCount: 0,
+      valorProposto: 0,
+      valorAprovado: 0,
+      valorPerdido: 0,
+      forecast: 0,
+      conversaoPct: 0
+    };
+  }, [weeksWithData, weeklyTimeline]);
+
+  // 1. DATA FOR CHART: Pipeline por Empresa do Grupo (Real dos Deals)
   const empresaChartData = useMemo(() => {
     const map: Record<string, { total: number; aprovado: number; count: number }> = {};
     allDeals.forEach(d => {
-      const emp = d.empresa || 'GPA ANGOLA';
+      const emp = (d.empresa || 'GPA ANGOLA').trim();
       if (!map[emp]) map[emp] = { total: 0, aprovado: 0, count: 0 };
       map[emp].total += Number(d.valor || 0);
-      map[emp].aprovado += Number(d.valorAprovado || 0);
+      map[emp].aprovado += Number(d.valorAprovado || (d.etapa === 'fechado' ? d.valor : 0) || 0);
       map[emp].count += 1;
     });
 
@@ -225,7 +265,7 @@ export default function DashboardView({
     }));
   }, [allDeals]);
 
-  // 2. DATA FOR CHART: Distribuição por Estado da Proposta
+  // 2. DATA FOR CHART: Distribuição por Estado da Proposta (Real dos Deals)
   const estadoChartData = useMemo(() => {
     const estadosMap: Record<string, { valor: number; count: number; cor: string }> = {
       'Proposta enviada': { valor: 0, count: 0, cor: '#38bdf8' },
@@ -239,10 +279,10 @@ export default function DashboardView({
       let stKey = 'Proposta enviada';
       const et = (d.etapa || '').toLowerCase();
       const st = (d.crmStatus || '').toLowerCase();
-      if (et === 'fechado' || st.includes('aprov')) stKey = 'Proposta aprovada';
-      else if (et === 'perdido' || st.includes('perdid')) stKey = 'Perdida';
-      else if (et === 'negociacao' || st.includes('negoc')) stKey = 'Proposta em negociação';
-      else if (et === 'producao' || st.includes('produc')) stKey = 'Produção / Entrega';
+      if (et === 'fechado' || st.includes('aprov') || st.includes('adjudic')) stKey = 'Proposta aprovada';
+      else if (et === 'perdido' || st.includes('perdid') || st.includes('recus')) stKey = 'Perdida';
+      else if (et === 'negociacao' || st.includes('negoc') || st.includes('analise')) stKey = 'Proposta em negociação';
+      else if (et === 'producao' || st.includes('produc') || st.includes('execuc')) stKey = 'Produção / Entrega';
 
       if (estadosMap[stKey]) {
         estadosMap[stKey].valor += Number(d.valor || 0);
@@ -258,37 +298,50 @@ export default function DashboardView({
     }));
   }, [allDeals]);
 
-  // 3. DATA FOR CHART: Metas e Performance por Gestor Comercial (Apenas Comerciais Reais, Excluindo Admins)
+  // 3. DATA FOR CHART: Metas e Performance por Gestor Comercial (Dados Reais 100% dos Deals)
   const performanceComercialData = useMemo(() => {
-    const onlyCommercials = comerciais.filter(isUserCommercial);
+    // Obter todos os nomes de comerciais reais nos deals + utilizadores comerciais
+    const comerciaisNomes = new Set<string>();
+    allDeals.forEach(d => {
+      if (d.comercialNome && d.comercialNome.trim()) {
+        comerciaisNomes.add(d.comercialNome.trim());
+      }
+    });
+    comerciais.filter(isUserCommercial).forEach(c => comerciaisNomes.add(c.nome.trim()));
 
-    return onlyCommercials.map(com => {
+    return Array.from(comerciaisNomes).map(nome => {
+      const userObj = comerciais.find(c => c.nome.toLowerCase().trim() === nome.toLowerCase().trim());
       const comDeals = allDeals.filter(d => 
-        (d.comercialNome || '').toLowerCase().trim() === com.nome.toLowerCase().trim() ||
-        d.comercialId === com.id
+        (d.comercialNome || '').toLowerCase().trim() === nome.toLowerCase().trim() ||
+        (userObj && d.comercialId === userObj.id)
       );
+
       const volumeTotal = comDeals.reduce((acc, d) => acc + Number(d.valor || 0), 0);
-      const volumeAprovado = comDeals.reduce((acc, d) => acc + Number(d.valorAprovado || 0), 0);
+      const volumeAprovado = comDeals.reduce((acc, d) => acc + Number(d.valorAprovado || (d.etapa === 'fechado' ? d.valor : 0) || 0), 0);
       const forecast = comDeals.reduce((acc, d) => {
         const pStr = String(d.probabilidade || '40').replace('%', '');
         const p = (parseFloat(pStr) || 40) / 100;
         return acc + (Number(d.valor || 0) * p);
       }, 0);
-      const pctMeta = com.metaSemanal > 0 ? (volumeAprovado / com.metaSemanal) * 100 : 0;
+
+      const metaSemanal = userObj?.metaSemanal || 6250000;
+      const metaMensal = userObj?.metaMensal || (metaSemanal * 4);
+      const pctMeta = metaSemanal > 0 ? (volumeAprovado / metaSemanal) * 100 : 0;
 
       let leitura = 'Sem actividade';
       if (comDeals.length > 0) {
         if (pctMeta >= 100) leitura = 'Meta atingida';
         else if (pctMeta >= 50) leitura = 'Acelerar fecho';
+        else if (volumeAprovado > 0) leitura = 'Intervenção necessária';
         else leitura = 'Intervenção necessária';
       }
 
       return {
-        nome: com.nome.split(' ')[0] + ' ' + (com.nome.split(' ')[1] || ''),
-        nomeCompleto: com.nome,
-        funcao: com.funcao,
-        metaSemanal: com.metaSemanal,
-        metaMensal: com.metaMensal,
+        nome: nome.split(' ')[0] + ' ' + (nome.split(' ')[1] || ''),
+        nomeCompleto: nome,
+        funcao: userObj?.funcao || 'Gestor Comercial',
+        metaSemanal,
+        metaMensal,
         propostas: comDeals.length,
         volumeTotal,
         volumeAprovado,
@@ -296,75 +349,123 @@ export default function DashboardView({
         pctMeta,
         leitura
       };
-    });
+    }).sort((a, b) => b.volumeAprovado - a.volumeAprovado || b.volumeTotal - a.volumeTotal);
   }, [comerciais, allDeals]);
 
-  // 4. DATA FOR CHART: Comparativo Semanal Oficial
+  // 4. DATA FOR CHART: Comparativo Semanal Oficial (100% Real das 2 Semanas)
   const comparativoDuasSemanasData = useMemo(() => {
-    const semAnterior = weeklyTimeline[weeklyTimeline.length - 2] || {
-      label: 'Semana Anterior',
-      propostasCount: 39,
-      valorProposto: 631254212.23,
-      valorAprovado: 5949044.59,
-      valorPerdido: 19397385.00,
-      forecast: 220995706.35,
-      conversaoPct: 0.94
-    };
-    const semFinda = weeklyTimeline[weeklyTimeline.length - 1] || {
-      label: 'Semana Finda',
-      propostasCount: 66,
-      valorProposto: 399761336.36,
-      valorAprovado: 44313860.00,
-      valorPerdido: 31362263.64,
-      forecast: 167430176.13,
-      conversaoPct: 11.09
-    };
+    const varPropostas = semAnterior.propostasCount > 0 ? ((semFinda.propostasCount - semAnterior.propostasCount) / semAnterior.propostasCount) * 100 : 0;
+    const varProposto = semAnterior.valorProposto > 0 ? ((semFinda.valorProposto - semAnterior.valorProposto) / semAnterior.valorProposto) * 100 : 0;
+    const varAprovado = semAnterior.valorAprovado > 0 ? ((semFinda.valorAprovado - semAnterior.valorAprovado) / semAnterior.valorAprovado) * 100 : 0;
+    const varPerdido = semAnterior.valorPerdido > 0 ? ((semFinda.valorPerdido - semAnterior.valorPerdido) / semAnterior.valorPerdido) * 100 : 0;
+    const varForecast = semAnterior.forecast > 0 ? ((semFinda.forecast - semAnterior.forecast) / semAnterior.forecast) * 100 : 0;
+    const varConversao = semAnterior.conversaoPct > 0 ? ((semFinda.conversaoPct - semAnterior.conversaoPct) / semAnterior.conversaoPct) * 100 : 0;
+
+    const ticketAnterior = semAnterior.propostasCount > 0 ? semAnterior.valorProposto / semAnterior.propostasCount : 0;
+    const ticketFinda = semFinda.propostasCount > 0 ? semFinda.valorProposto / semFinda.propostasCount : 0;
+    const varTicket = ticketAnterior > 0 ? ((ticketFinda - ticketAnterior) / ticketAnterior) * 100 : 0;
 
     return [
       {
-        indicador: 'N.º Propostas',
+        indicador: 'N.º de Propostas Enviadas',
         anterior: semAnterior.propostasCount,
         finda: semFinda.propostasCount,
-        varPct: semAnterior.propostasCount > 0 ? ((semFinda.propostasCount - semAnterior.propostasCount) / semAnterior.propostasCount) * 100 : 0,
-        leitura: semFinda.propostasCount >= semAnterior.propostasCount ? 'Mais propostas' : 'Menos propostas'
+        varPct: varPropostas,
+        leitura: semFinda.propostasCount >= semAnterior.propostasCount ? 'Volume em crescimento' : 'Volume inferior'
       },
       {
-        indicador: 'Valor Proposto',
+        indicador: 'Valor de Proposta (Kz)',
         anterior: semAnterior.valorProposto,
         finda: semFinda.valorProposto,
-        varPct: semAnterior.valorProposto > 0 ? ((semFinda.valorProposto - semAnterior.valorProposto) / semAnterior.valorProposto) * 100 : 0,
-        leitura: semFinda.valorProposto >= semAnterior.valorProposto ? 'Crescimento' : 'Redução'
+        varPct: varProposto,
+        leitura: semFinda.valorProposto >= semAnterior.valorProposto ? 'Pipeline em crescimento' : 'Pipeline inferior'
       },
       {
-        indicador: 'Valor Aprovado',
+        indicador: 'Valor Aprovado / Adjudicado (Kz)',
         anterior: semAnterior.valorAprovado,
         finda: semFinda.valorAprovado,
-        varPct: semAnterior.valorAprovado > 0 ? ((semFinda.valorAprovado - semAnterior.valorAprovado) / semAnterior.valorAprovado) * 100 : 0,
-        leitura: semFinda.valorAprovado >= semAnterior.valorAprovado ? 'Melhoria significativa' : 'Abaixo'
+        varPct: varAprovado,
+        leitura: semFinda.valorAprovado >= semAnterior.valorAprovado ? 'Melhoria de adjudicação' : 'Abaixo do esperado'
       },
       {
-        indicador: 'Valor Perdido',
+        indicador: 'Valor Perdido / Recusado (Kz)',
         anterior: semAnterior.valorPerdido,
         finda: semFinda.valorPerdido,
-        varPct: semAnterior.valorPerdido > 0 ? ((semFinda.valorPerdido - semAnterior.valorPerdido) / semAnterior.valorPerdido) * 100 : 0,
-        leitura: semFinda.valorPerdido <= semAnterior.valorPerdido ? 'Positivo (reduziu)' : 'Atenção (aumentou)'
+        varPct: varPerdido,
+        leitura: semFinda.valorPerdido <= semAnterior.valorPerdido ? 'Positivo (recusadas reduziram)' : 'Atenção (recusadas aumentaram)'
       },
       {
-        indicador: 'Forecast Ponderado',
+        indicador: 'Forecast Ponderado (Kz)',
         anterior: semAnterior.forecast,
         finda: semFinda.forecast,
-        varPct: semAnterior.forecast > 0 ? ((semFinda.forecast - semAnterior.forecast) / semAnterior.forecast) * 100 : 0,
-        leitura: semFinda.forecast >= semAnterior.forecast ? 'Pipeline robusto' : 'Redução'
+        varPct: varForecast,
+        leitura: semFinda.forecast >= semAnterior.forecast ? 'Pipeline robusto' : 'Pipeline enfraquecido'
       },
       {
-        indicador: 'Taxa de Conversão',
+        indicador: 'Taxa de Aprovação (%)',
         anterior: semAnterior.conversaoPct,
         finda: semFinda.conversaoPct,
-        varPct: semAnterior.conversaoPct > 0 ? ((semFinda.conversaoPct - semAnterior.conversaoPct) / semAnterior.conversaoPct) * 100 : 0,
-        leitura: semFinda.conversaoPct >= semAnterior.conversaoPct ? 'Melhoria' : 'Abaixo'
+        varPct: varConversao,
+        leitura: semFinda.conversaoPct >= semAnterior.conversaoPct ? 'Eficiência a melhorar' : 'Eficiência abaixo'
+      },
+      {
+        indicador: 'Ticket Médio por Proposta (Kz)',
+        anterior: ticketAnterior,
+        finda: ticketFinda,
+        varPct: varTicket,
+        leitura: ticketFinda >= ticketAnterior ? 'Ticket médio superior' : 'Ticket médio inferior'
       }
     ];
-  }, [weeklyTimeline]);
+  }, [semAnterior, semFinda]);
+
+  // Dataset real para o Gráfico Comparativo de Barras
+  const chartComparativoData = useMemo(() => {
+    return [
+      {
+        name: 'N.º Propostas',
+        Anterior: semAnterior.propostasCount,
+        Finda: semFinda.propostasCount
+      },
+      {
+        name: 'Aprovado (Kz)',
+        Anterior: semAnterior.valorAprovado,
+        Finda: semFinda.valorAprovado
+      },
+      {
+        name: 'Perdido (Kz)',
+        Anterior: semAnterior.valorPerdido,
+        Finda: semFinda.valorPerdido
+      },
+      {
+        name: 'Forecast (Kz)',
+        Anterior: semAnterior.forecast,
+        Finda: semFinda.forecast
+      }
+    ];
+  }, [semAnterior, semFinda]);
+
+  // KPIs dinâmicos da Semana Finda para o Dashboard Semanal V5.0
+  const semanalKPIs = useMemo(() => {
+    // Se metrics.current tiver propostas do período filtrado, usa ele; senão usa semFinda
+    if (metrics.current.propostasCount > 0 || metrics.current.valorPropostoTotal > 0) {
+      return {
+        propostas: metrics.current.propostasCount,
+        valorProposto: metrics.current.valorPropostoTotal,
+        valorAprovado: metrics.current.valorAprovadoTotal,
+        pipelineAberto: metrics.current.pipelineAbertoTotal || (metrics.current.valorPropostoTotal - metrics.current.valorAprovadoTotal - metrics.current.valorPerdidoTotal),
+        forecast: metrics.current.forecastTotal,
+        conversaoPct: metrics.current.taxaConversaoPct
+      };
+    }
+    return {
+      propostas: semFinda.propostasCount || allDeals.length,
+      valorProposto: semFinda.valorProposto || allDeals.reduce((s, d) => s + Number(d.valor || 0), 0),
+      valorAprovado: semFinda.valorAprovado || allDeals.reduce((s, d) => s + Number(d.valorAprovado || (d.etapa === 'fechado' ? d.valor : 0) || 0), 0),
+      pipelineAberto: (semFinda.valorProposto - semFinda.valorAprovado - semFinda.valorPerdido) || allDeals.filter(d => d.etapa !== 'fechado' && d.etapa !== 'perdido').reduce((s, d) => s + Number(d.valor || 0), 0),
+      forecast: semFinda.forecast || allDeals.reduce((s, d) => s + (Number(d.valor || 0) * (parseFloat(String(d.probabilidade || '40')) / 100)), 0),
+      conversaoPct: semFinda.conversaoPct || (allDeals.length > 0 ? (allDeals.filter(d => d.etapa === 'fechado').length / allDeals.length) * 100 : 0)
+    };
+  }, [metrics, semFinda, allDeals]);
 
   // 5. DATA FOR MONTHLY CONSOLIDATED
   const monthlyConsolidatedKPIs = useMemo(() => {
@@ -573,71 +674,89 @@ export default function DashboardView({
           
           {/* CARD 1: PROPOSTAS */}
           <div className="bg-slate-900/80 text-white p-4 rounded-xl border border-blue-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-cyan-400 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">PROPOSTAS</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">
+              {dashboardMode === 'semanal_v5' ? 'PROPOSTAS ENVIADAS' : 'TOTAL DE PROPOSTAS'}
+            </span>
             <div className="mt-2">
               <h3 className="text-2xl font-black font-mono text-white">
-                {dashboardMode === 'semanal_v5' ? metrics.current.propostasCount || allDeals.length : monthlyConsolidatedKPIs.propostasTotal}
+                {dashboardMode === 'semanal_v5' ? semanalKPIs.propostas : monthlyConsolidatedKPIs.propostasTotal}
               </h3>
-              <span className="text-[10px] text-slate-400 font-medium">Oportunidades</span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                {dashboardMode === 'semanal_v5' ? 'Propostas da Semana Finda' : 'Oportunidades totais'}
+              </span>
             </div>
           </div>
 
-          {/* CARD 2: VALOR PROPOSTO */}
+          {/* CARD 2: VALOR DE PROPOSTA */}
           <div className="bg-slate-900/80 text-white p-4 rounded-xl border border-cyan-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-cyan-300 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">VALOR PROPOSTO</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">
+              {dashboardMode === 'semanal_v5' ? 'VALOR DE PROPOSTA (Kz)' : 'VALOR TOTAL PROPOSTO (Kz)'}
+            </span>
             <div className="mt-2">
-              <h3 className="text-xl font-black font-mono text-cyan-300">
-                {formatShortKz(dashboardMode === 'semanal_v5' ? metrics.current.valorPropostoTotal || monthlyConsolidatedKPIs.valorTotal : monthlyConsolidatedKPIs.valorTotal)}
+              <h3 className="text-lg sm:text-xl font-black font-mono text-cyan-300 leading-tight">
+                {formatKz(dashboardMode === 'semanal_v5' ? semanalKPIs.valorProposto : monthlyConsolidatedKPIs.valorTotal)}
               </h3>
-              <span className="text-[9.5px] text-slate-400 font-mono truncate block">
-                {formatKz(dashboardMode === 'semanal_v5' ? metrics.current.valorPropostoTotal || monthlyConsolidatedKPIs.valorTotal : monthlyConsolidatedKPIs.valorTotal)}
+              <span className="text-[9.5px] text-slate-400 font-mono truncate block mt-0.5">
+                {dashboardMode === 'semanal_v5' ? 'Volume total submetido' : 'Total acumulado'}
               </span>
             </div>
           </div>
 
-          {/* CARD 3: APROVADO */}
+          {/* CARD 3: RECEITA APROVADA */}
           <div className="bg-emerald-950/80 text-white p-4 rounded-xl border border-emerald-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-emerald-400 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">APROVADO</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+              {dashboardMode === 'semanal_v5' ? 'RECEITA APROVADA (Kz)' : 'VALOR APROVADO / ADJUDICADO (Kz)'}
+            </span>
             <div className="mt-2">
-              <h3 className="text-xl font-black font-mono text-emerald-300">
-                {formatShortKz(dashboardMode === 'semanal_v5' ? metrics.current.valorAprovadoTotal || monthlyConsolidatedKPIs.valorAprovado : monthlyConsolidatedKPIs.valorAprovado)}
+              <h3 className="text-lg sm:text-xl font-black font-mono text-emerald-300 leading-tight">
+                {formatKz(dashboardMode === 'semanal_v5' ? semanalKPIs.valorAprovado : monthlyConsolidatedKPIs.valorAprovado)}
               </h3>
-              <span className="text-[9.5px] text-emerald-200/80 font-mono truncate block">
-                {formatKz(dashboardMode === 'semanal_v5' ? metrics.current.valorAprovadoTotal || monthlyConsolidatedKPIs.valorAprovado : monthlyConsolidatedKPIs.valorAprovado)}
+              <span className="text-[9.5px] text-emerald-200/80 font-mono truncate block mt-0.5">
+                {dashboardMode === 'semanal_v5' ? 'Propostas adjudicadas' : 'Total aprovado'}
               </span>
             </div>
           </div>
 
-          {/* CARD 4: PIPELINE ABERTO */}
+          {/* CARD 4: EM NEGOCIAÇÃO / PIPELINE ABERTO */}
           <div className="bg-slate-900/80 text-white p-4 rounded-xl border border-indigo-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-indigo-400 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">PIPELINE ABERTO</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">
+              {dashboardMode === 'semanal_v5' ? 'EM NEGOCIAÇÃO / ABERTO (Kz)' : 'PIPELINE ABERTO (Kz)'}
+            </span>
             <div className="mt-2">
-              <h3 className="text-xl font-black font-mono text-amber-300">
-                {formatShortKz(dashboardMode === 'semanal_v5' ? metrics.current.pipelineAbertoTotal || (monthlyConsolidatedKPIs.valorTotal - monthlyConsolidatedKPIs.valorAprovado - monthlyConsolidatedKPIs.valorPerdido) : (monthlyConsolidatedKPIs.valorTotal - monthlyConsolidatedKPIs.valorAprovado))}
+              <h3 className="text-lg sm:text-xl font-black font-mono text-amber-300 leading-tight">
+                {formatKz(dashboardMode === 'semanal_v5' ? semanalKPIs.pipelineAberto : (monthlyConsolidatedKPIs.valorTotal - monthlyConsolidatedKPIs.valorAprovado))}
               </h3>
-              <span className="text-[9.5px] text-slate-400 font-mono truncate block">Em Negociação / Aberto</span>
+              <span className="text-[9.5px] text-slate-400 font-mono truncate block mt-0.5">
+                {dashboardMode === 'semanal_v5' ? 'Propostas em análise/negociação' : 'Por fechar neste mês'}
+              </span>
             </div>
           </div>
 
-          {/* CARD 5: FORECAST */}
+          {/* CARD 5: FORECAST PONDERADO */}
           <div className="bg-amber-950/80 text-white p-4 rounded-xl border border-amber-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-amber-400 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">FORECAST PONDERADO</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+              FORECAST PONDERADO (Kz)
+            </span>
             <div className="mt-2">
-              <h3 className="text-xl font-black font-mono text-amber-300">
-                {formatShortKz(dashboardMode === 'semanal_v5' ? metrics.current.forecastTotal || monthlyConsolidatedKPIs.pipelinePonderado : monthlyConsolidatedKPIs.pipelinePonderado)}
+              <h3 className="text-lg sm:text-xl font-black font-mono text-amber-300 leading-tight">
+                {formatKz(dashboardMode === 'semanal_v5' ? semanalKPIs.forecast : monthlyConsolidatedKPIs.pipelinePonderado)}
               </h3>
-              <span className="text-[9.5px] text-amber-200/80 font-mono truncate block">Receita Ponderada</span>
+              <span className="text-[9.5px] text-amber-200/80 font-mono truncate block mt-0.5">
+                {dashboardMode === 'semanal_v5' ? 'Receita esperada ponderada' : 'Acumulado mensal ponderado'}
+              </span>
             </div>
           </div>
 
-          {/* CARD 6: CONVERSÃO */}
+          {/* CARD 6: TAXA DE APROVAÇÃO */}
           <div className="bg-indigo-950/80 text-white p-4 rounded-xl border border-indigo-500/40 shadow-xl backdrop-blur-md flex flex-col justify-between hover:border-indigo-400 transition-all">
-            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">CONVERSÃO</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">TAXA DE APROVAÇÃO</span>
             <div className="mt-2">
               <h3 className="text-2xl font-black font-mono text-indigo-300">
-                {dashboardMode === 'semanal_v5' ? (metrics.current.taxaConversaoPct || monthlyConsolidatedKPIs.conversaoPct).toFixed(2) : monthlyConsolidatedKPIs.conversaoPct.toFixed(1)}%
+                {formatPct(dashboardMode === 'semanal_v5' ? semanalKPIs.conversaoPct : monthlyConsolidatedKPIs.conversaoPct)}
               </h3>
-              <span className="text-[10px] text-indigo-300 font-medium">Taxa Global de Sucesso</span>
+              <span className="text-[10px] text-indigo-300 font-medium">
+                {dashboardMode === 'semanal_v5' ? 'Aprovado / Proposto' : 'Taxa Global de Sucesso'}
+              </span>
             </div>
           </div>
 
@@ -840,11 +959,13 @@ export default function DashboardView({
             <div className="flex items-center gap-2">
               <Calendar className="text-cyan-400" size={20} />
               <h3 className="text-sm font-black uppercase text-white tracking-wide">
-                4. Comparativo das Duas Semanas (Semana Anterior vs Semana Finda)
+                {dashboardMode === 'semanal_v5'
+                  ? '4. Comparativo Semana Anterior vs Semana Finda — Análise de Resultados'
+                  : '4. Comparativo Mensal — Evolução de Indicadores'}
               </h3>
             </div>
             <span className="text-[11px] bg-cyan-950 text-cyan-300 font-bold px-3 py-1 rounded-full border border-cyan-800">
-              Análise de Tendência
+              {dashboardMode === 'semanal_v5' ? 'Indicadores Reais — Linguagem dos Relatórios GPA' : 'Acumulado Mensal'}
             </span>
           </div>
 
@@ -854,11 +975,11 @@ export default function DashboardView({
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#0B172A] text-slate-200 font-bold uppercase text-[10px]">
                   <tr>
-                    <th className="p-2.5">Indicador</th>
+                    <th className="p-2.5">Indicador CRM</th>
                     <th className="p-2.5 text-right font-mono">Semana Anterior</th>
                     <th className="p-2.5 text-right font-mono">Semana Finda</th>
                     <th className="p-2.5 text-center font-mono">Variação</th>
-                    <th className="p-2.5 text-center">Leitura</th>
+                    <th className="p-2.5 text-center">Leitura Comercial</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 font-medium">
@@ -866,14 +987,18 @@ export default function DashboardView({
                     <tr key={idx} className="hover:bg-slate-800/40">
                       <td className="p-2.5 font-bold text-white">{row.indicador}</td>
                       <td className="p-2.5 text-right font-mono text-slate-300">
-                        {row.indicador.includes('Taxa') ? `${Number(row.anterior).toFixed(2)}%` : row.indicador.includes('N.º') ? row.anterior : formatShortKz(Number(row.anterior))}
+                        {row.indicador.includes('Taxa') ? formatPct(Number(row.anterior)) : row.indicador.includes('N.º') ? row.anterior : formatKz(Number(row.anterior))}
                       </td>
                       <td className="p-2.5 text-right font-mono font-bold text-white">
-                        {row.indicador.includes('Taxa') ? `${Number(row.finda).toFixed(2)}%` : row.indicador.includes('N.º') ? row.finda : formatShortKz(Number(row.finda))}
+                        {row.indicador.includes('Taxa') ? formatPct(Number(row.finda)) : row.indicador.includes('N.º') ? row.finda : formatKz(Number(row.finda))}
                       </td>
                       <td className="p-2.5 text-center font-mono font-bold">
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${row.varPct >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : 'bg-rose-950 text-rose-300 border border-rose-700'}`}>
-                          {row.varPct >= 0 ? `+${row.varPct.toFixed(1)}%` : `${row.varPct.toFixed(1)}%`}
+                        <span className={`px-2 py-0.5 rounded text-[10px] ${
+                          (row.indicador.includes('Perdido') || row.indicador.includes('Recusado'))
+                            ? (row.varPct >= 0 ? 'bg-rose-950 text-rose-300 border border-rose-700' : 'bg-emerald-950 text-emerald-300 border border-emerald-700')
+                            : (row.varPct >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : 'bg-rose-950 text-rose-300 border border-rose-700')
+                        }`}>
+                          {row.varPct >= 0 ? `+${row.varPct.toFixed(1).replace('.', ',')}%` : `${row.varPct.toFixed(1).replace('.', ',')}%`}
                         </span>
                       </td>
                       <td className="p-2.5 text-center font-bold text-[11px] text-slate-300">{row.leitura}</td>
@@ -887,21 +1012,22 @@ export default function DashboardView({
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={[
-                    { name: 'N.º Propostas', Anterior: 39, Finda: 66 },
-                    { name: 'Aprovado (M Kz)', Anterior: 5.95, Finda: 44.31 },
-                    { name: 'Perdido (M Kz)', Anterior: 19.39, Finda: 31.36 },
-                    { name: 'Forecast (M Kz)', Anterior: 220.99, Finda: 167.43 }
-                  ]}
+                  data={chartComparativoData}
                   margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold', fill: '#cbd5e1' }} stroke="#475569" />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155', color: '#ffffff' }} />
-                  <Legend />
-                  <Bar dataKey="Anterior" fill="#64748b" radius={[4, 4, 0, 0]} name="Semana Anterior" />
-                  <Bar dataKey="Finda" fill="#38bdf8" radius={[4, 4, 0, 0]} name="Semana Finda" />
+                  <YAxis tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(0)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" />
+                  <Tooltip
+                    formatter={(value: any, name: string) => [
+                      typeof value === 'number' && value > 500 ? formatKz(Number(value)) : `${value} propostas`,
+                      name === 'Anterior' ? (semAnterior.label || 'Semana Anterior') : (semFinda.label || 'Semana Finda')
+                    ]}
+                    contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155', color: '#ffffff' }}
+                  />
+                  <Legend formatter={(name) => name === 'Anterior' ? (semAnterior.label || 'Semana Anterior') : (semFinda.label || 'Semana Finda')} />
+                  <Bar dataKey="Anterior" fill="#64748b" radius={[4, 4, 0, 0]} name="Anterior" />
+                  <Bar dataKey="Finda" fill="#38bdf8" radius={[4, 4, 0, 0]} name="Finda" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
