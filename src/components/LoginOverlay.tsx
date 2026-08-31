@@ -220,7 +220,7 @@ export default function LoginOverlay({ comerciais, onLoginSuccess, addNotificati
   };
 
   return (
-    <div id="loginOverlay" className="fixed inset-0 min-h-screen w-screen bg-[#060a12] z-[99999] flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-x-hidden overflow-y-auto">
+    <div id="loginOverlay" className="fixed inset-0 min-h-[100dvh] h-[100dvh] w-full bg-[#060a12] z-[99999] flex flex-col items-center justify-center p-3 sm:p-6 relative overflow-x-hidden overflow-y-auto touch-scroll pt-safe pb-safe">
       {/* Background Animated Video Layer */}
       <video
         ref={videoRef}
@@ -241,12 +241,12 @@ export default function LoginOverlay({ comerciais, onLoginSuccess, addNotificati
       <div className="fixed top-1/2 left-1/4 -translate-y-1/2 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none z-0 animate-pulse"></div>
       <div className="fixed top-1/2 right-1/4 -translate-y-1/2 w-96 h-96 bg-cyan-500/25 rounded-full blur-3xl pointer-events-none z-0 animate-pulse"></div>
 
-      <div className="my-auto w-full max-w-md flex flex-col items-center justify-center z-10 py-6">
-        <div className="bg-slate-900/90 backdrop-blur-2xl text-slate-100 rounded-3xl p-7 sm:p-8 w-full shadow-2xl border border-cyan-400/40 animate-fade-in text-center relative hover:border-cyan-300 transition duration-300">
+      <div className="my-auto w-full max-w-md flex flex-col items-center justify-center z-10 py-4 sm:py-6">
+        <div className="bg-slate-900/90 backdrop-blur-2xl text-slate-100 rounded-3xl p-5 sm:p-8 w-full shadow-2xl border border-cyan-400/40 animate-fade-in text-center relative hover:border-cyan-300 transition duration-300">
           
           {/* Logo / Brand */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-20 h-20 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mb-3 shadow-xl border border-cyan-500/40 p-2 relative group">
+          <div className="flex flex-col items-center mb-5 sm:mb-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mb-3 shadow-xl border border-cyan-500/40 p-2 relative group">
               <AppLogoImage src={appLogo} alt="GPA Logo" />
             </div>
             <div className="flex items-center gap-2">

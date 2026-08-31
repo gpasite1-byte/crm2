@@ -135,29 +135,29 @@ export default function TopBar({
   });
 
   return (
-    <header className="w-full h-[70px] border-b flex items-center justify-between px-4 md:px-8 relative z-50 shrink-0 shadow-lg bg-white/90 dark:bg-[#001f3f] border-sky-200 dark:border-cyan-500/30 text-slate-900 dark:text-white">
+    <header className="w-full h-[60px] md:h-[70px] border-b flex items-center justify-between px-3 sm:px-4 md:px-8 relative z-40 shrink-0 shadow-lg bg-white/95 dark:bg-[#001f3f]/95 backdrop-blur-md border-sky-200 dark:border-cyan-500/30 text-slate-900 dark:text-white transition-all">
       
-      {/* Title */}
-      <div className="flex items-center gap-2 md:gap-3 max-w-[45%]">
+      {/* Title & Brand */}
+      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0 max-w-[55%] sm:max-w-[50%]">
         {onToggleMobileMenu && (
           <button
             onClick={onToggleMobileMenu}
-            className="md:hidden p-2 rounded-xl transition mr-1 cursor-pointer flex-shrink-0 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="md:hidden p-1.5 sm:p-2 rounded-xl transition mr-0.5 sm:mr-1 cursor-pointer flex-shrink-0 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
             title="Abrir menu"
           >
-            <Menu size={18} />
+            <Menu size={20} />
           </button>
         )}
         <div className="hidden xl:flex flex-col rounded-2xl border px-3 py-1.5 shadow-sm border-sky-200 dark:border-cyan-400/20 bg-sky-50 dark:bg-cyan-950/40">
           <span className="text-[9px] font-black uppercase tracking-[0.24em] text-sky-700 dark:text-cyan-200">Hoje</span>
           <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-100">{new Date().toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
         </div>
-        <h2 className="text-xs md:text-base font-black uppercase tracking-wider truncate drop-shadow-sm text-slate-900 dark:text-white">{getTitle()}</h2>
-        <span className="hidden sm:inline-flex text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md bg-emerald-100 text-emerald-800 dark:bg-gradient-to-r from-amber-400 to-emerald-400 dark:text-slate-950">v8.0 PRO</span>
+        <h2 className="text-xs sm:text-sm md:text-base font-black uppercase tracking-wider truncate drop-shadow-sm text-slate-900 dark:text-white">{getTitle()}</h2>
+        <span className="hidden sm:inline-flex text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-md bg-emerald-100 text-emerald-800 dark:bg-gradient-to-r from-amber-400 to-emerald-400 dark:text-slate-950 shrink-0">v8.0 PRO</span>
       </div>
 
       {/* Header Actions */}
-      <div className="flex items-center gap-2.5 sm:gap-4">
+      <div className="flex items-center gap-1.5 sm:gap-3 md:gap-4 shrink-0">
         
         {/* PDF Data Extractor IA Button */}
         {onOpenPdfExtractor && (
@@ -173,8 +173,8 @@ export default function TopBar({
 
         {/* Global Search */}
         <div ref={searchRef} className="relative">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-cyan-400">
-            <Search size={15} />
+          <span className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center text-cyan-400 pointer-events-none">
+            <Search size={14} />
           </span>
           <input
             type="text"
@@ -183,13 +183,13 @@ export default function TopBar({
               setSearchQuery(e.target.value);
               setShowDropdown(true);
             }}
-            placeholder="Procurar..."
-            className="w-[140px] sm:w-[220px] pl-9 pr-4 py-1.5 rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 text-xs font-medium transition-all shadow-sm"
+            placeholder="Buscar..."
+            className="w-[100px] xs:w-[130px] sm:w-[200px] md:w-[220px] focus:w-[150px] xs:focus:w-[180px] sm:focus:w-[220px] pl-7 sm:pl-9 pr-3 py-1.5 rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 text-xs font-medium transition-all shadow-sm"
           />
           
           {/* Dropdown Results */}
           {showDropdown && searchResults.length > 0 && (
-            <div className="absolute top-[42px] right-0 sm:left-0 w-[300px] sm:w-[320px] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] overflow-hidden max-h-[300px] overflow-y-auto">
+            <div className="fixed sm:absolute top-[65px] sm:top-[42px] left-3 right-3 sm:left-0 sm:right-auto sm:w-[320px] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] overflow-hidden max-h-[300px] overflow-y-auto">
               {searchResults.map((res, i) => (
                 <button
                   key={i}
@@ -209,14 +209,14 @@ export default function TopBar({
             </div>
           )}
           {showDropdown && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-            <div className="absolute top-[42px] right-0 sm:left-0 w-[300px] sm:w-[320px] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] p-4 text-center text-xs font-semibold text-slate-400">
+            <div className="fixed sm:absolute top-[65px] sm:top-[42px] left-3 right-3 sm:left-0 sm:right-auto sm:w-[320px] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] p-4 text-center text-xs font-semibold text-slate-400">
               Sem resultados encontrados para "{searchQuery}"
             </div>
           )}
         </div>
 
         {/* Notifications Bell */}
-        <div className="relative flex items-center gap-1.5">
+        <div className="relative flex items-center gap-1 sm:gap-1.5">
           
           {/* Live Realtime Connection Badge */}
           <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/90 border border-emerald-500/40 rounded-full text-[10px] font-bold text-emerald-300" title="Firestore e Notificações v8.0 Sincronizados em Tempo Real">
@@ -238,21 +238,21 @@ export default function TopBar({
           <button
             ref={bellRef}
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2.5 text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-full transition cursor-pointer shadow-sm"
+            className="relative p-2 sm:p-2.5 text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-full transition cursor-pointer shadow-sm"
             title="Notificações em Tempo Real"
           >
-            <Bell size={18} />
+            <Bell size={17} />
             {visibleNotifications.length > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 border border-slate-950 rounded-full animate-ping"></span>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 border border-slate-950 rounded-full animate-ping"></span>
             )}
             {visibleNotifications.length > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 border border-slate-950 rounded-full"></span>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 border border-slate-950 rounded-full"></span>
             )}
           </button>
 
           {/* Notifications Card */}
           {showNotifications && (
-            <div ref={notifRef} className="fixed sm:absolute right-2 sm:right-0 top-[60px] sm:top-[45px] w-[calc(100vw-24px)] sm:w-[350px] max-w-[350px] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] overflow-hidden font-sans">
+            <div ref={notifRef} className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-[65px] sm:top-[45px] sm:w-[350px] max-w-[calc(100vw-24px)] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-[9999] overflow-hidden font-sans">
               <div className="px-4 py-3 bg-slate-950 text-white font-bold text-xs flex justify-between items-center uppercase tracking-wide border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <span>🔔 Notificações ({visibleNotifications.length})</span>

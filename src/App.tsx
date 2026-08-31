@@ -9,7 +9,7 @@ import {
   initialRelatoriosDiarios, initialHistoricoSemanas, initialHistoricoMeses,
   loadFromLocalStorage, saveToLocalStorage
 } from './data';
-import { Camera } from 'lucide-react';
+import { Camera, LayoutDashboard, MessageSquare, Users2, Columns, Menu, Sparkles } from 'lucide-react';
 import { processInvoiceAutomation } from './lib/invoiceAutomation';
 const bgVideo = '/videos/Prompt_Direto_e_Suave_Reco.mp4';
 
@@ -2855,7 +2855,7 @@ export default function App() {
   }
 
   return (
-    <div className={`flex h-screen overflow-hidden font-sans relative ${themeMode === 'dark' ? 'bg-[#060a12] text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
+    <div className={`flex h-screen h-[100dvh] min-h-[100dvh] w-full overflow-hidden font-sans relative ${themeMode === 'dark' ? 'bg-[#060a12] text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
       
       {/* Global Animated Video Background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
@@ -2953,7 +2953,7 @@ export default function App() {
         />
 
         {/* Dynamic Inner Dashboard View Scrollable content */}
-        <div className="flex-grow overflow-y-auto p-3 sm:p-5 md:p-6 w-full space-y-6">
+        <div className="flex-grow overflow-y-auto touch-scroll p-2.5 sm:p-4 md:p-6 w-full space-y-4 sm:space-y-6 pb-24 md:pb-6">
           {activeTab === 'dashboard' && (
             <DashboardView
               comerciais={onlyComerciais}
@@ -3427,14 +3427,80 @@ export default function App() {
           )}
         </div>
 
+        {/* Mobile Bottom Navigation Bar (App Nativo iOS / Android) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 dark:bg-[#001428]/95 backdrop-blur-xl border-t border-cyan-500/20 shadow-2xl px-2 py-1.5 flex items-center justify-around pb-safe transition-all">
+          <button
+            onClick={() => handleViewChange('dashboard')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'dashboard'
+                ? 'text-cyan-400 font-extrabold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <LayoutDashboard size={19} className={activeTab === 'dashboard' ? 'text-cyan-400' : 'text-slate-400'} />
+            <span className="text-[9px] mt-0.5 tracking-tight uppercase font-semibold">Início</span>
+          </button>
+
+          <button
+            onClick={() => handleViewChange('chat')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer relative ${
+              activeTab === 'chat'
+                ? 'text-cyan-400 font-extrabold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <MessageSquare size={19} className={activeTab === 'chat' ? 'text-cyan-400' : 'text-slate-400'} />
+              {unreadChatCount > 0 && (
+                <span className="absolute -top-1 -right-2 bg-rose-500 text-white font-black text-[8px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                  {unreadChatCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[9px] mt-0.5 tracking-tight uppercase font-semibold">Chat</span>
+          </button>
+
+          <button
+            onClick={() => handleViewChange('clientes')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'clientes'
+                ? 'text-cyan-400 font-extrabold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Users2 size={19} className={activeTab === 'clientes' ? 'text-cyan-400' : 'text-slate-400'} />
+            <span className="text-[9px] mt-0.5 tracking-tight uppercase font-semibold">Clientes</span>
+          </button>
+
+          <button
+            onClick={() => handleViewChange('crm')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'crm'
+                ? 'text-cyan-400 font-extrabold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Columns size={19} className={activeTab === 'crm' ? 'text-cyan-400' : 'text-slate-400'} />
+            <span className="text-[9px] mt-0.5 tracking-tight uppercase font-semibold">Pipeline</span>
+          </button>
+
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            <Menu size={19} className="text-slate-400" />
+            <span className="text-[9px] mt-0.5 tracking-tight uppercase font-semibold">Menu</span>
+          </button>
+        </nav>
+
       </div>
 
       {/* MODALS RENDER SECTION */}
       
       {/* Schedule Visit Modal */}
       {isScheduleVisitOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] overflow-y-auto touch-scroll">
             <div className="flex items-center justify-between">
               <h5 className="text-sm font-extrabold text-[#003366] uppercase tracking-wide">Agendar Nova Visita Técnica</h5>
               <button
@@ -3488,8 +3554,8 @@ export default function App() {
 
       {/* Edit Schedule Modal */}
       {isEditScheduleOpen && selectedScheduleForEdit && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] overflow-y-auto touch-scroll">
             <h5 className="text-sm font-extrabold text-[#003366] uppercase tracking-wide">Editar Agendamento — {selectedScheduleForEdit.empresa}</h5>
             <form onSubmit={handleEditScheduleSubmit} className="space-y-4 text-left">
               <div className="flex flex-col gap-1">
@@ -3514,8 +3580,8 @@ export default function App() {
 
       {/* Add Client Modal */}
       {isAddClientOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] overflow-y-auto touch-scroll">
             <h5 className="text-sm font-extrabold text-[#003366] uppercase tracking-wide">Cadastrar Novo Cliente</h5>
             <form onSubmit={handleAddClientSubmit} className="space-y-4 text-left">
               <div className="flex flex-col gap-1">
@@ -3566,8 +3632,8 @@ export default function App() {
 
       {/* Edit Client Modal */}
       {isEditClientOpen && selectedClientForEdit && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] overflow-y-auto touch-scroll">
             <h5 className="text-sm font-extrabold text-[#003366] uppercase tracking-wide">Editar Cliente</h5>
             <form onSubmit={handleEditClientSubmit} className="space-y-4 text-left">
               <div className="flex flex-col gap-1">

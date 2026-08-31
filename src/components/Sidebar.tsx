@@ -133,7 +133,7 @@ export default function Sidebar({
         </div>
 
       {/* Nav List */}
-      <nav className="flex-grow overflow-y-auto p-3.5 space-y-1 custom-scrollbar">
+      <nav className="flex-grow overflow-y-auto p-3.5 space-y-1 touch-scroll custom-scrollbar pb-safe">
         <ul className="space-y-1">
           {menuItems.filter(item => item.visible).map(item => {
             const Icon = item.icon;
@@ -141,7 +141,10 @@ export default function Sidebar({
             return (
               <li key={item.id}>
                 <button
-                  onClick={() => onViewChange(item.id)}
+                  onClick={() => {
+                    onViewChange(item.id);
+                    if (onCloseMobileMenu) onCloseMobileMenu();
+                  }}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wide transition duration-150 text-left cursor-pointer border ${
                     isActive
                       ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white font-black shadow-lg shadow-emerald-500/20 border-emerald-300/60'
@@ -169,7 +172,10 @@ export default function Sidebar({
         {/* Separator for HELENA IA 8.0 assistant */}
         <div className={`border-t my-3 pt-3 ${themeMode === 'dark' ? 'border-cyan-500/20' : 'border-sky-200'}`}>
           <button
-            onClick={() => onViewChange('helena')}
+            onClick={() => {
+              onViewChange('helena');
+              if (onCloseMobileMenu) onCloseMobileMenu();
+            }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition duration-150 text-left cursor-pointer ${
               currentView === 'helena'
                 ? 'bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-400 text-slate-950 font-black shadow-lg shadow-amber-500/30'
