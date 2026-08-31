@@ -1020,11 +1020,12 @@ export default function App() {
           }
         }
 
-        // Ensure Carlos Francisco is Comercial
+        // Ensure Carlos Francisco is Comercial and strictly Ativo
         if (newU.email.toLowerCase() === 'carlos.francisco@gpaangola.co.ao' || newU.nome === 'Carlos Francisco') {
-          if (newU.perfil !== 'comercial') {
+          const isStaleBlocked = newU.status === 'bloqueado' && !localStorage.getItem('gpa_explicit_blocked_u7');
+          if (newU.perfil !== 'comercial' || isStaleBlocked) {
             changed = true;
-            newU = { ...newU, perfil: 'comercial', funcao: 'Comercial', senha: newU.senha || 'gpa2026' };
+            newU = { ...newU, perfil: 'comercial', funcao: 'Comercial', status: 'ativo', senha: newU.senha || 'gpa2026' };
           }
         }
 
@@ -2732,13 +2733,14 @@ export default function App() {
 
   // User Administration callbacks
   const handleToggleBlockUser = (id: string, explicitStatus?: 'ativo' | 'bloqueado') => {
-    lastMutatedTimeRef.current = Date.now() + 15000;
+    lastMutatedTimeRef.current = Date.now() + 20000;
     
     let targetUser: Usuario | null = null;
     let nextStatus: 'ativo' | 'bloqueado' = 'ativo';
 
     const updatedComerciais = comerciais.map(u => {
-      if (u.id === id) {
+      const isMatch = u.id === id || (u.email && u.email.toLowerCase().trim() === id.toLowerCase().trim());
+      if (isMatch) {
         const currentlyBlocked = String(u.status || '').toLowerCase().trim() === 'bloqueado' || String(u.status || '').toLowerCase().trim() === 'inativo';
         nextStatus = explicitStatus ? explicitStatus : (currentlyBlocked ? 'ativo' : 'bloqueado');
         targetUser = { ...u, status: nextStatus };
@@ -2746,6 +2748,15 @@ export default function App() {
       }
       return u;
     });
+
+    if (nextStatus === 'bloqueado') {
+      try { localStorage.setItem(`gpa_explicit_blocked_${id}`, 'true'); } catch (e) {}
+    } else {
+      try { 
+        localStorage.removeItem(`gpa_explicit_blocked_${id}`); 
+        if (targetUser?.id) localStorage.removeItem(`gpa_explicit_blocked_${targetUser.id}`);
+      } catch (e) {}
+    }
 
     setComerciais(updatedComerciais);
     saveToLocalStorage('gpa_comerciais', updatedComerciais);
@@ -2773,6 +2784,8 @@ export default function App() {
       baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
 
+    lastSavedPayloadRef.current = JSON.stringify(payload);
+
     saveCrmDataToFirestore(payload).catch(err => console.warn('Error saving user status to Firestore:', err));
     fetch('/api/crm-data', {
       method: 'POST',
@@ -2782,7 +2795,7 @@ export default function App() {
     fetch('/api/users/toggle-block', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status: nextStatus })
+      body: JSON.stringify({ id: targetUser?.id || id, status: nextStatus })
     }).catch(() => {});
 
     const uName = (targetUser as Usuario | null)?.nome || 'Utilizador';
