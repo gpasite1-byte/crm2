@@ -9,7 +9,7 @@ import { PeriodType } from '../utils/periodEngine';
 interface MetasComissoesViewProps {
   comerciais: Usuario[];
   deals: Deal[];
-  loggedUser: Usuario;
+  loggedUser: Usuario | null;
   refDate?: Date;
   onRefDateChange?: (d: Date) => void;
   selectedPeriod?: PeriodType;
@@ -24,8 +24,8 @@ interface MetasComissoesViewProps {
 }
 
 export default function MetasComissoesView({
-  comerciais,
-  deals,
+  comerciais = [],
+  deals = [],
   loggedUser,
   refDate,
   onRefDateChange,
@@ -45,30 +45,34 @@ export default function MetasComissoesView({
   const [tempMetaKz, setTempMetaKz] = useState<number>(15000000);
   const [tempComissaoPct, setTempComissaoPct] = useState<number>(5);
 
-  const formatKz = (val: number) => {
-    return new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(val).replace('AOA', 'Kz');
+  const formatKz = (val?: number | null) => {
+    const num = typeof val === 'number' && !Number.isNaN(val) ? val : 0;
+    return new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(num).replace('AOA', 'Kz');
   };
 
   // Filter out administrators (Admin, Admin 1, Admin 2, etc.) - only actual commercial team
-  const salesComerciais = comerciais.filter(isUserCommercial);
+  const safeComerciais = Array.isArray(comerciais) ? comerciais : [];
+  const safeDeals = Array.isArray(deals) ? deals : [];
+  const salesComerciais = safeComerciais.filter(isUserCommercial);
 
   // Calculate actual sales per commercial (won deals)
   const statsPerCommercial = salesComerciais.map(u => {
-    const userDeals = deals.filter(d =>
-      d.comercialNome.toLowerCase() === u.nome.toLowerCase() ||
-      d.comercialId === u.id
-    );
+    const uName = (u?.nome || '').toLowerCase().trim();
+    const userDeals = safeDeals.filter(d => {
+      const dName = (d?.comercialNome || '').toLowerCase().trim();
+      return (uName !== '' && dName === uName) || (d?.comercialId && u?.id && d.comercialId === u.id);
+    });
 
-    const fechadosGanhos = userDeals.filter(d => d.etapa === 'fechado' || d.etapa === 'producao');
-    const valorGanhoTotal = fechadosGanhos.reduce((sum, d) => sum + (d.valorAprovado || d.valor || 0), 0);
+    const fechadosGanhos = userDeals.filter(d => d && (d.etapa === 'fechado' || d.etapa === 'producao'));
+    const valorGanhoTotal = fechadosGanhos.reduce((sum, d) => sum + (d?.valorAprovado || d?.valor || 0), 0);
 
-    const pipelineAtivo = userDeals.filter(d => d.etapa !== 'fechado' && d.etapa !== 'producao' && d.etapa !== 'perdido');
-    const valorPipelineAtivo = pipelineAtivo.reduce((sum, d) => sum + (d.valor || 0), 0);
+    const pipelineAtivo = userDeals.filter(d => d && d.etapa !== 'fechado' && d.etapa !== 'producao' && d.etapa !== 'perdido');
+    const valorPipelineAtivo = pipelineAtivo.reduce((sum, d) => sum + (d?.valor || 0), 0);
 
-    const metaKz = u.metaMensal || 15000000;
-    const comissaoPct = u.comissao || 5;
+    const metaKz = u?.metaMensal || 15000000;
+    const comissaoPct = u?.comissao || 5;
 
-    const pctCumprimento = Math.min(Math.round((valorGanhoTotal / metaKz) * 100), 200);
+    const pctCumprimento = metaKz > 0 ? Math.min(Math.round((valorGanhoTotal / metaKz) * 100), 200) : 0;
     const comissaoGanhaKz = (valorGanhoTotal * comissaoPct) / 100;
     const comissaoProjetadaKz = ((valorGanhoTotal + (valorPipelineAtivo * 0.5)) * comissaoPct) / 100;
 
@@ -91,6 +95,7 @@ export default function MetasComissoesView({
   const pctGlobalEquipa = totalMetaEquipa > 0 ? Math.round((totalFaturadoEquipa / totalMetaEquipa) * 100) : 0;
 
   const handleStartEdit = (item: typeof statsPerCommercial[0]) => {
+    if (!item?.usuario?.id) return;
     setEditingUserId(item.usuario.id);
     setTempMetaKz(item.metaKz);
     setTempComissaoPct(item.comissaoPct);
@@ -274,7 +279,7 @@ export default function MetasComissoesView({
                       <span className="font-mono font-black text-amber-600">{formatKz(item.comissaoGanhaKz)}</span>
                     </div>
 
-                    {loggedUser.perfil === 'admin' && (
+                    {(loggedUser?.perfil === 'admin' || isUserManager(loggedUser)) && (
                       <button
                         onClick={() => isEditing ? handleSaveEdit(item.usuario.id) : handleStartEdit(item)}
                         className={`text-xs font-bold px-3 py-1.5 rounded transition cursor-pointer ${

@@ -253,43 +253,54 @@ export function parseDateFlexible(dateStr?: string | Date | number | null): Date
     }
   }
 
-  // Check text labels for relative weeks (e.g. "Semana Finda", "Semana Anterior", "27–31 Jul", etc.)
+  // Check text labels for relative weeks & explicit GPA report week ranges
   const lower = str.toLowerCase();
   const today = new Date();
   const currentMonday = getMonday(today);
 
-  // Official report week mappings (July 2026 baseline)
-  if (lower.includes('finda') || lower.includes('semana finda') || lower.includes('27–31') || lower.includes('27-31')) {
+  // 1. Explicit GPA commercial report week mappings (July - August - September 2026)
+  if (lower.includes('24–28') || lower.includes('24-28') || lower.includes('24 a 28') || lower.includes('24 à 28') || (lower.includes('24') && lower.includes('ago'))) {
+    return new Date(2026, 7, 24); // 24 Ago 2026
+  }
+  if (lower.includes('17–21') || lower.includes('17-21') || lower.includes('17 a 21') || lower.includes('17 à 21') || (lower.includes('17') && lower.includes('ago'))) {
+    return new Date(2026, 7, 17); // 17 Ago 2026
+  }
+  if (lower.includes('10–14') || lower.includes('10-14') || lower.includes('10 a 14') || lower.includes('10 à 14') || (lower.includes('10') && lower.includes('ago'))) {
+    return new Date(2026, 7, 10); // 10 Ago 2026
+  }
+  if (lower.includes('03–07') || lower.includes('03-07') || lower.includes('3-7') || lower.includes('3 a 7') || lower.includes('03 a 07') || (lower.includes('03') && lower.includes('ago')) || (lower.includes('3') && lower.includes('ago'))) {
+    return new Date(2026, 7, 3); // 03 Ago 2026
+  }
+  if (lower.includes('27–31') || lower.includes('27-31') || lower.includes('27 a 31') || lower.includes('27 à 31') || (lower.includes('27') && lower.includes('jul'))) {
     return new Date(2026, 6, 27); // 27 Jul 2026
   }
-  if (lower.includes('anterior') || lower.includes('20–25') || lower.includes('20-25') || lower.includes('20–24') || lower.includes('20-24')) {
+  if (lower.includes('20–25') || lower.includes('20-25') || lower.includes('20–24') || lower.includes('20-24') || lower.includes('20 a 24') || (lower.includes('20') && lower.includes('jul'))) {
     return new Date(2026, 6, 20); // 20 Jul 2026
   }
-  if (lower.includes('13–17') || lower.includes('13-17')) {
+  if (lower.includes('13–17') || lower.includes('13-17') || lower.includes('13 a 17') || lower.includes('13 à 17') || (lower.includes('13') && lower.includes('jul'))) {
     return new Date(2026, 6, 13); // 13 Jul 2026
   }
-  if (lower.includes('06–10') || lower.includes('06-10')) {
+  if (lower.includes('06–10') || lower.includes('06-10') || lower.includes('6-10') || lower.includes('06 a 10') || (lower.includes('06') && lower.includes('jul')) || (lower.includes('6') && lower.includes('jul'))) {
     return new Date(2026, 6, 6); // 06 Jul 2026
   }
 
+  // Relative labels
   if (lower.includes('actual') || lower.includes('esta semana') || lower.includes('actualidade')) {
-    return currentMonday;
+    return new Date(2026, 7, 24); // Baseline latest week 24-28 Ago
   }
-  if (lower.includes('passada')) {
-    const prevMon = new Date(currentMonday);
-    prevMon.setDate(currentMonday.getDate() - 7);
-    return prevMon;
+  if (lower.includes('finda') || lower.includes('semana finda')) {
+    return new Date(2026, 7, 24); // 24-28 Ago
+  }
+  if (lower.includes('anterior') || lower.includes('passada')) {
+    return new Date(2026, 7, 17); // 17-21 Ago
   }
   if (lower.includes('semana - 2') || lower.includes('há 2 semanas')) {
-    const mon2 = new Date(currentMonday);
-    mon2.setDate(currentMonday.getDate() - 14);
-    return mon2;
+    return new Date(2026, 7, 10); // 10-14 Ago
   }
   if (lower.includes('semana - 3') || lower.includes('há 3 semanas')) {
-    const mon3 = new Date(currentMonday);
-    mon3.setDate(currentMonday.getDate() - 21);
-    return mon3;
+    return new Date(2026, 7, 3); // 03-07 Ago
   }
+
   const ptWeekMatch = lower.match(/(?:(\d{1,2})\s*[-–]\s*)?(\d{1,2})\s+([a-z]{3,4})/);
   if (ptWeekMatch) {
     const startDay = ptWeekMatch[1] ? parseInt(ptWeekMatch[1], 10) : null;
@@ -299,7 +310,7 @@ export function parseDateFlexible(dateStr?: string | Date | number | null): Date
     const month = monthsShort.findIndex(m => monthStr.startsWith(m));
     if (month !== -1) {
       const yearMatch = lower.match(/\b(20\d{2})\b/);
-      const year = yearMatch ? parseInt(yearMatch[1], 10) : today.getFullYear();
+      const year = yearMatch ? parseInt(yearMatch[1], 10) : 2026;
       
       if (startDay !== null && startDay > endDay) {
          const d = new Date(year, month - 1, startDay);
@@ -417,27 +428,40 @@ export function generateDynamicWeeklyTimeline(
 ): WeeklyTimelineBucket[] {
   const refMonday = getMonday(refDate);
 
-  // 1. Determinar intervalo de semanas (começar 4 semanas atrás até 4 semanas no futuro)
-  const weekStartDates: Date[] = [];
-  for (let i = -5; i <= 4; i++) {
-    const monday = new Date(refMonday);
-    monday.setDate(refMonday.getDate() + i * 7);
-    weekStartDates.push(monday);
-  }
+  // 1. Colectar todas as segundas-feiras das semanas com dados reais de propostas
+  const weekStartMap = new Map<number, Date>();
+  
+  // Garantir a inclusão das semanas canónicas do ciclo comercial GPA 2026
+  const canonicalWeeks = [
+    new Date(2026, 6, 6),  // 06–10 Jul 2026
+    new Date(2026, 6, 13), // 13–17 Jul 2026
+    new Date(2026, 6, 20), // 20–24 Jul 2026
+    new Date(2026, 6, 27), // 27–31 Jul 2026
+    new Date(2026, 7, 3),  // 03–07 Ago 2026
+    new Date(2026, 7, 10), // 10–14 Ago 2026
+    new Date(2026, 7, 17), // 17–21 Ago 2026
+    new Date(2026, 7, 24), // 24–28 Ago 2026
+    new Date(2026, 7, 31), // 31 Ago – 04 Set 2026
+  ];
+  canonicalWeeks.forEach(d => {
+    const mon = getMonday(d);
+    weekStartMap.set(mon.getTime(), mon);
+  });
 
-  // Se houver propostas com datas anteriores, incluir essas semanas também
+  // Adicionar semana da refDate actual
+  weekStartMap.set(refMonday.getTime(), refMonday);
+
+  // Adicionar qualquer outra semana encontrada nas propostas
   deals.forEach(d => {
     const dDate = parseDateFlexible(d.dataEnvio) || parseDateFlexible(d.semana);
     if (dDate) {
       const dMonday = getMonday(dDate);
-      if (!weekStartDates.some(w => w.getTime() === dMonday.getTime())) {
-        weekStartDates.push(dMonday);
-      }
+      weekStartMap.set(dMonday.getTime(), dMonday);
     }
   });
 
   // Ordenar cronologicamente
-  weekStartDates.sort((a, b) => a.getTime() - b.getTime());
+  const weekStartDates = Array.from(weekStartMap.values()).sort((a, b) => a.getTime() - b.getTime());
 
   const currentMondayTime = refMonday.getTime();
 

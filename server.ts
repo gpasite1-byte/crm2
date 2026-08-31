@@ -608,14 +608,47 @@ function getCrmData() {
   return initialData;
 }
 
-// Auto-import handler for Excel files in ./Documentos (or ./Ducumentos)
-async function importExcelFromDucumentos() {
-  try {
-    const docsDir = getExcelDocsDir();
-    if (!fs.existsSync(docsDir)) return { success: false, message: "Pasta Documentos não encontrada." };
+// Helper function to clean text from HTML exports
+function cleanHtmlCell(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#769;/g, '')
+    .replace(/&#768;/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-    const files = fs.readdirSync(docsDir).filter(f => f.endsWith(".xlsx") || f.endsWith(".xls"));
-    if (files.length === 0) return { success: false, message: "Nenhum ficheiro Excel encontrado em Documentos." };
+function parseHtmlTableFromContent(htmlContent: string): string[][] {
+  const rows: string[][] = [];
+  const trMatches = htmlContent.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+  for (const tr of trMatches) {
+    const row: string[] = [];
+    const cellMatches = tr.match(/<(?:td|th)[^>]*>[\s\S]*?<\/(?:td|th)>/gi) || [];
+    for (const cell of cellMatches) {
+      row.push(cleanHtmlCell(cell));
+    }
+    if (row.length > 0 && row.some(c => c !== '')) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+// Auto-import handler for all GPA weekly reports (HTML exports and Excel files)
+async function syncAllReportsToDatabase() {
+  try {
+    const rootDir = process.cwd();
+    const relatorioDir = path.join(rootDir, "RELATORIO CRM GPA");
+    const docsDir = getExcelDocsDir();
 
     let currentData = getCrmData();
     try {
@@ -633,189 +666,327 @@ async function importExcelFromDucumentos() {
       }
     } catch (e) {}
 
-    let deals = currentData.deals || [];
-    let clients = currentData.clients || [];
-    let importedDealsCount = 0;
-    let importedClientsCount = 0;
+    const comerciais = currentData.comerciais || [];
+    const dealsMap = new Map<string, any>();
+    const clientsMap = new Map<string, any>();
 
-    files.forEach(file => {
-      const filePath = path.join(docsDir, file);
-      const wb = XLSX.readFile(filePath);
-
-      wb.SheetNames.forEach(sheetName => {
-        const sheet = wb.Sheets[sheetName];
-        const rawData = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "" });
-        if (!rawData || rawData.length < 2) return;
-
-        // Find header row dynamically (within first 15 rows)
-        let headerRowIdx = -1;
-        for (let i = 0; i < Math.min(15, rawData.length); i++) {
-          const rowStr = JSON.stringify(rawData[i]).toLowerCase();
-          if (rowStr.includes("cliente") || rowStr.includes("empresa") || rowStr.includes("serviço") || rowStr.includes("servico") || rowStr.includes("proposta")) {
-            headerRowIdx = i;
-            break;
-          }
-        }
-
-        if (headerRowIdx === -1) return;
-
-        const headers = rawData[headerRowIdx].map(h => String(h).trim());
-        const dataRows = rawData.slice(headerRowIdx + 1);
-
-        dataRows.forEach((row, idx) => {
-          if (!row || !Array.isArray(row) || row.every(cell => cell === "")) return;
-
-          const getVal = (patterns: string[]) => {
-            for (const p of patterns) {
-              const hIdx = headers.findIndex(h => h.toLowerCase().includes(p.toLowerCase()));
-              if (hIdx >= 0 && row[hIdx] !== undefined && row[hIdx] !== null && String(row[hIdx]).trim() !== "") {
-                return row[hIdx];
-              }
-            }
-            return "";
-          };
-
-          const clienteNome = String(getVal(["cliente", "empresa", "organização", "nome do cliente"])).trim();
-          const titulo = String(getVal(["serviço", "servico", "descrição", "produto", "proposta", "título", "descrição do serviço"])).trim();
-          if (!clienteNome && !titulo) return;
-
-          // Smart Date Detection across sheets & file names
-          const rawDate = getVal(["data de envio", "data envio", "data da proposta", "data", "semana", "periodo", "período"]);
-          let dataEnvio = "";
-
-          const fileOrSheet = (file + " " + sheetName + " " + String(rawDate)).toLowerCase();
-
-          if (fileOrSheet.includes("27") || fileOrSheet.includes("jul")) {
-            dataEnvio = "2026-07-27";
-          } else if (fileOrSheet.includes("03") || (fileOrSheet.includes("ago") && fileOrSheet.includes("07"))) {
-            dataEnvio = "2026-08-03";
-          } else if (fileOrSheet.includes("10") || (fileOrSheet.includes("14") && fileOrSheet.includes("ago"))) {
-            dataEnvio = "2026-08-10";
-          } else if (fileOrSheet.includes("17") || (fileOrSheet.includes("21") && fileOrSheet.includes("ago"))) {
-            dataEnvio = "2026-08-17";
-          } else if (fileOrSheet.includes("22") || (fileOrSheet.includes("31") && fileOrSheet.includes("ago"))) {
-            dataEnvio = "2026-08-22";
-          }
-
-          if (typeof rawDate === "number" && !dataEnvio) {
-            const parsed = XLSX.SSF.parse_date_code(rawDate);
-            if (parsed) {
-              dataEnvio = `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
-            }
-          }
-
-          if (!dataEnvio) {
-            dataEnvio = idx % 2 === 0 ? "2026-07-27" : "2026-08-03";
-          }
-
-          // Stage
-          const rawEstado = String(getVal(["estado proposta", "estado crm", "estado", "status", "situação", "resultado"])).toLowerCase().trim();
-          let etapa: any = "proposta";
-          if (rawEstado.includes("aprov") || rawEstado.includes("fechad") || rawEstado.includes("ganha")) etapa = "fechado";
-          else if (rawEstado.includes("perdid") || rawEstado.includes("rejeit")) etapa = "perdido";
-          else if (rawEstado.includes("negoc")) etapa = "negociacao";
-          else if (rawEstado.includes("reuni") || rawEstado.includes("visit")) etapa = "visita";
-          else if (rawEstado.includes("contact")) etapa = "contato";
-          else if (rawEstado.includes("lead")) etapa = "lead";
-
-          // Parse numbers
-          const parseNum = (v: any) => {
-            if (typeof v === "number") return v;
-            const clean = String(v || "").replace(/[^\d,-]/g, "").replace(",", ".");
-            return parseFloat(clean) || 0;
-          };
-
-          const valor = parseNum(getVal(["valor proposta", "valor (kz)", "valor", "montante", "orçamento", "total"]));
-          const valorAprovado = parseNum(getVal(["valor aprovado"]));
-          const valorPerdido = parseNum(getVal(["valor perdido"]));
-
-          const gestorComercial = String(getVal(["gestor comercial", "comercial", "vendedor", "responsável"])).trim();
-          const empresaGroup = String(getVal(["empresa do grupo", "grupo", "empresa"])).trim() || "GPA Angola";
-
-          const comObj = (currentData.comerciais || []).find((c: any) =>
-            c.nome.toLowerCase().includes((gestorComercial || "").toLowerCase().split(" ")[0])
-          ) || { id: "u9", nome: gestorComercial || "David Neto" };
-
-          const cleanFileId = file.substring(0, 8).replace(/[^a-z0-9]/gi, '_');
-          const dealId = `imp_${cleanFileId}_${sheetName}_${idx}`;
-
-          const newDeal = {
-            id: dealId,
-            clienteNome: clienteNome || "Cliente " + idx,
-            titulo: titulo || "Proposta Comercial " + idx,
-            valor: valor || 1500000,
-            valorAprovado: etapa === "fechado" ? (valorAprovado || valor || 1500000) : undefined,
-            valorPerdido: etapa === "perdido" ? (valorPerdido || valor || 1500000) : undefined,
-            etapa,
-            comercialId: comObj.id,
-            comercialNome: comObj.nome,
-            prioridade: valor > 5000000 ? "Alta" : "Normal",
-            diasAberto: Math.floor(Math.random() * 15) + 1,
-            dataEnvio,
-            semana: dataEnvio,
-            empresaGrupo: empresaGroup
-          };
-
-          if (!deals.some((d: any) => d.id === dealId)) {
-            deals.push(newDeal);
-            importedDealsCount++;
-          }
-
-          if (clienteNome && !clients.some((c: any) => c.empresa.toLowerCase() === clienteNome.toLowerCase())) {
-            clients.push({
-              id: `c_imp_${idx}`,
-              nome: clienteNome,
-              empresa: clienteNome,
-              nif: "5417" + Math.floor(100000 + Math.random() * 900000),
-              telefone: "+244 923 " + Math.floor(100000 + Math.random() * 900000),
-              provincia: "Luanda",
-              segmento: "Geral",
-              status: "ativo",
-              responsavel: comObj.id,
-              ultimaVisita: dataEnvio,
-              proximaVisita: "2026-08-30",
-              endereco: "Luanda, Angola"
-            });
-            importedClientsCount++;
-          }
-        });
-      });
+    // Seed existing deals
+    (currentData.deals || []).forEach((d: any) => {
+      const k = `${(d.clienteNome || '').toLowerCase()}_${(d.titulo || '').toLowerCase()}_${d.valor}_${d.dataEnvio}`;
+      dealsMap.set(k, d);
     });
 
-    currentData.deals = deals;
-    currentData.clients = clients;
+    // Commercial matcher helper
+    const matchCommercial = (gestorName?: string) => {
+      if (!gestorName) return { id: "u9", nome: "David Neto" };
+      const gLow = gestorName.toLowerCase();
+      const found = comerciais.find((c: any) => {
+        const cLow = (c.nome || '').toLowerCase();
+        const firstName = cLow.split(' ')[0];
+        return gLow.includes(firstName) || cLow.includes(gLow.split(' ')[0]);
+      });
+      return found || { id: "u9", nome: gestorName };
+    };
 
+    const parseNum = (v: any) => {
+      if (typeof v === "number") return v;
+      const clean = String(v || "").replace(/[^\d,-]/g, "").replace(",", ".");
+      return parseFloat(clean) || 0;
+    };
+
+    // Helper to process a 2D table of rows
+    const processTableRows = (rows: string[][], sourceTag: string, defaultDate: string, weekLabel: string) => {
+      let headerRowIdx = -1;
+      for (let i = 0; i < Math.min(15, rows.length); i++) {
+        const rowStr = rows[i].join(' ').toLowerCase();
+        if (rowStr.includes("cliente") || rowStr.includes("empresa") || rowStr.includes("serviço") || rowStr.includes("servico") || rowStr.includes("proposta")) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+      if (headerRowIdx === -1) return;
+
+      const headers = rows[headerRowIdx].map(h => String(h || '').toLowerCase().trim());
+      const dataRows = rows.slice(headerRowIdx + 1);
+
+      const getColVal = (row: string[], keywords: string[]) => {
+        for (const kw of keywords) {
+          const idx = headers.findIndex(h => h.includes(kw));
+          if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== "") {
+            return String(row[idx]).trim();
+          }
+        }
+        return "";
+      };
+
+      dataRows.forEach((row, idx) => {
+        if (!row || row.every(cell => cell === "")) return;
+
+        const cliente = getColVal(row, ["cliente", "empresa / cliente", "entidade", "empresa / entidade", "empresa"]);
+        const servico = getColVal(row, ["serviço", "servico", "produto / serviço", "descrição", "produto", "proposta", "título"]);
+        const gestor = getColVal(row, ["gestor comercial", "comercial", "gestor", "vendedor", "responsável"]);
+        const valProposta = parseNum(getColVal(row, ["valor de proposta", "valor da proposta", "valor proposta", "valor (kz)", "valor total", "montante", "valor"]));
+        const valAprovado = parseNum(getColVal(row, ["valor aprovado", "aprovado"]));
+        const valPerdido = parseNum(getColVal(row, ["valor perdido", "perdido"]));
+        const estado = getColVal(row, ["estado proposta", "estado crm", "estado", "status", "situação", "resultado"]);
+        const prioridade = getColVal(row, ["prioridade"]) || (valProposta > 5000000 ? "Alta" : "Normal");
+        const semanaCol = getColVal(row, ["semana", "período", "periodo"]);
+        const dataEnvioCol = getColVal(row, ["data de envio", "data envio", "data"]);
+        const proximaAcao = getColVal(row, ["próxima acção", "proxima acao", "próxima ação", "acção"]);
+        const proximoContacto = getColVal(row, ["próximo contacto", "proximo contacto", "contacto"]);
+        const observacoes = getColVal(row, ["observações", "observacoes", "ponto de situação"]);
+        const diasEmAberto = parseInt(getColVal(row, ["dias em aberto", "dias"]), 10) || 5;
+
+        if (!cliente && !servico && valProposta === 0) return;
+
+        // Stage
+        const estLower = estado.toLowerCase();
+        let etapa: any = "proposta";
+        if (estLower.includes("aprov") || estLower.includes("fechad") || estLower.includes("ganh") || estLower.includes("adjudic")) etapa = "fechado";
+        else if (estLower.includes("perdid") || estLower.includes("recus") || estLower.includes("rejeit")) etapa = "perdido";
+        else if (estLower.includes("negoc")) etapa = "negociacao";
+        else if (estLower.includes("produc") || estLower.includes("produç")) etapa = "producao";
+        else if (estLower.includes("visit") || estLower.includes("reuni")) etapa = "visita";
+
+        // Date detection
+        let finalDate = defaultDate;
+        if (dataEnvioCol && dataEnvioCol.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          finalDate = dataEnvioCol;
+        } else if (dataEnvioCol && dataEnvioCol.match(/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}$/)) {
+          const p = dataEnvioCol.split(/[\/\-\.]/);
+          finalDate = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+
+        const comObj = matchCommercial(gestor);
+        const finalSemana = semanaCol || weekLabel;
+        const dealKey = `${cliente.toLowerCase()}_${servico.toLowerCase()}_${valProposta}_${finalDate}`;
+
+        const dealId = `d_imp_${sourceTag}_${idx}`;
+        const newDeal = {
+          id: dealId,
+          clienteNome: cliente || "Cliente " + idx,
+          empresa: cliente || "GPA Angola",
+          titulo: servico || (cliente ? `Fornecimento / Serviços para ${cliente}` : `Proposta Comercial ${idx}`),
+          valor: valProposta || (etapa === 'fechado' ? valAprovado : 0),
+          valorAprovado: etapa === "fechado" ? (valAprovado || valProposta) : valAprovado,
+          valorPerdido: etapa === "perdido" ? (valPerdido || valProposta) : valPerdido,
+          etapa,
+          comercialId: comObj.id,
+          comercialNome: comObj.nome,
+          prioridade,
+          diasAberto: diasEmAberto,
+          dataEnvio: finalDate,
+          dataAprovacao: etapa === "fechado" ? finalDate : undefined,
+          dataPerda: etapa === "perdido" ? finalDate : undefined,
+          semana: finalSemana,
+          probabilidade: etapa === 'fechado' ? 100 : etapa === 'perdido' ? 0 : etapa === 'negociacao' ? 60 : 40,
+          proximaAcao: proximaAcao || "Acompanhamento da proposta comercial",
+          proximoContacto: proximoContacto || finalDate,
+          observacoes: observacoes || "Registo sincronizado do relatório oficial",
+          crmStatus: estado || (etapa === 'fechado' ? 'Fechado ganho' : etapa === 'perdido' ? 'Fechado perdido' : 'Aberto'),
+          classeCliente: "B",
+          empresaGroup: cliente || "GPA Angola"
+        };
+
+        dealsMap.set(dealKey, newDeal);
+
+        if (cliente && !clientsMap.has(cliente.toLowerCase())) {
+          clientsMap.set(cliente.toLowerCase(), {
+            id: `c_${cliente.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20)}`,
+            nome: cliente,
+            empresa: cliente,
+            nif: "5417" + Math.floor(100000 + Math.random() * 900000),
+            telefone: "+244 923 " + Math.floor(100000 + Math.random() * 900000),
+            provincia: comObj.provincia || "Luanda",
+            segmento: "Corporativo",
+            status: "ativo",
+            responsavel: comObj.id,
+            ultimaVisita: finalDate,
+            proximaVisita: "2026-09-05",
+            endereco: `${comObj.provincia || "Luanda"}, Angola`
+          });
+        }
+      });
+    };
+
+    // 1. Process HTML Report Folders in RELATORIO CRM GPA
+    const reportFolders = [
+      {
+        tag: 'w_24_28_ago',
+        weekLabel: '24–28 Ago 2026',
+        defaultDate: '2026-08-24',
+        dir: path.join(relatorioDir, 'RELATÓRIO COMERCIAL - 24 À 28 DE AGOSTO DE 2026 - Dashboard_Comercial_Grupo_GPA_V5_ficheiros'),
+        sheets: ['sheet002.htm', 'sheet004.htm']
+      },
+      {
+        tag: 'w_17_21_ago',
+        weekLabel: '17–21 Ago 2026',
+        defaultDate: '2026-08-17',
+        dir: path.join(relatorioDir, '10-14 Ago a 17-21 Ago', 'RELATÓRIO_COMERCIAL_17_A_21_AGOSTO_2026_DASHBOARD_V5_ACTUALIZADO_ficheiros'),
+        sheets: ['sheet002.htm', 'sheet004.htm']
+      },
+      {
+        tag: 'w_10_14_ago',
+        weekLabel: '10–14 Ago 2026',
+        defaultDate: '2026-08-10',
+        dir: path.join(relatorioDir, '03-07 Ago a 10-14 ago', 'RELATÓRIO COMERCIAL - 10 À 14 DE AGOSTO DE 2026 Dashboard_Comercial_Grupo_GPA_V5_Actualizado (1)_ficheiros'),
+        sheets: ['sheet002.htm', 'sheet004.htm']
+      },
+      {
+        tag: 'w_03_07_ago',
+        weekLabel: '03–07 Ago 2026',
+        defaultDate: '2026-08-03',
+        dir: path.join(relatorioDir, '27–31 Jul a 03–07 Ago', 'Dashboard_Comercial_Grupo_GPA_V5_Actualizado (2) (2)_ficheiros'),
+        sheets: ['sheet002.htm', 'sheet004.htm']
+      },
+      {
+        tag: 'w_julho_consolidado',
+        weekLabel: '27–31 Jul 2026',
+        defaultDate: '2026-07-27',
+        dir: path.join(relatorioDir, 'Relatorio de mes de Julho', 'RELATÓRIO DE CONSOLIDADO - MÊS DE  JULHO DE 2026_ficheiros'),
+        sheets: ['sheet003.htm', 'sheet004.htm']
+      },
+      {
+        tag: 'w_13_17_jul',
+        weekLabel: '13–17 Jul 2026',
+        defaultDate: '2026-07-13',
+        dir: path.join(relatorioDir, '06–10 Jul a 13–17 Jul', 'Cópia de Analise_Critica_Comercial_13-17_Julho_2026 (1)_ficheiros'),
+        sheets: ['sheet002.htm', 'sheet004.htm']
+      }
+    ];
+
+    reportFolders.forEach(rf => {
+      if (fs.existsSync(rf.dir)) {
+        rf.sheets.forEach(sFile => {
+          const fPath = path.join(rf.dir, sFile);
+          if (fs.existsSync(fPath)) {
+            try {
+              const html = fs.readFileSync(fPath, 'latin1');
+              const rows = parseHtmlTableFromContent(html);
+              processTableRows(rows, `${rf.tag}_${sFile.replace('.htm', '')}`, rf.defaultDate, rf.weekLabel);
+            } catch (e: any) {
+              console.warn(`Error reading ${fPath}:`, e.message);
+            }
+          }
+        });
+      }
+    });
+
+    // 2. Process Excel Files in Ducumentos and RELATORIO CRM GPA
+    const processExcelDir = (dirPath: string) => {
+      if (!fs.existsSync(dirPath)) return;
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          processExcelDir(full);
+        } else if (entry.name.endsWith('.xlsx') && !entry.name.startsWith('~$')) {
+          try {
+            const wb = XLSX.readFile(full);
+            wb.SheetNames.forEach((sheetName: string) => {
+              const ws = wb.Sheets[sheetName];
+              const rawData = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+              if (rawData && rawData.length > 2) {
+                const sRows = rawData.map(r => Array.isArray(r) ? r.map(c => String(c !== undefined && c !== null ? c : '')) : []);
+                
+                let defDate = '2026-08-24';
+                let wLabel = '24–28 Ago 2026';
+                const lower = (entry.name + ' ' + sheetName).toLowerCase();
+                if (lower.includes('17') || (lower.includes('21') && lower.includes('ago'))) {
+                  defDate = '2026-08-17';
+                  wLabel = '17–21 Ago 2026';
+                } else if (lower.includes('10') || (lower.includes('14') && lower.includes('ago'))) {
+                  defDate = '2026-08-10';
+                  wLabel = '10–14 Ago 2026';
+                } else if (lower.includes('03') || (lower.includes('07') && lower.includes('ago'))) {
+                  defDate = '2026-08-03';
+                  wLabel = '03–07 Ago 2026';
+                } else if (lower.includes('27') || (lower.includes('31') && lower.includes('jul'))) {
+                  defDate = '2026-07-27';
+                  wLabel = '27–31 Jul 2026';
+                } else if (lower.includes('13') || (lower.includes('17') && lower.includes('jul'))) {
+                  defDate = '2026-07-13';
+                  wLabel = '13–17 Jul 2026';
+                }
+
+                processTableRows(sRows, `${entry.name.substring(0, 8)}_${sheetName}`, defDate, wLabel);
+              }
+            });
+          } catch (e: any) {
+            console.warn(`Error reading Excel ${full}:`, e.message);
+          }
+        }
+      }
+    };
+
+    processExcelDir(docsDir);
+    processExcelDir(relatorioDir);
+
+    const finalDeals = Array.from(dealsMap.values()).map((d, i) => ({
+      ...d,
+      id: d.id || `deal_gpa_${i + 1}`
+    }));
+    const finalClients = Array.from(clientsMap.values());
+
+    currentData.deals = finalDeals;
+    if (finalClients.length > 0) {
+      currentData.clients = finalClients;
+    }
+    currentData.lastUpdated = new Date().toISOString();
+
+    // Persist to local JSON DB
     try {
       fs.writeFileSync(CRM_DB_FILE, JSON.stringify(currentData, null, 2), "utf-8");
-    } catch (e) {}
+      console.log(`✅ Database synced locally: ${finalDeals.length} propostas com semanas até 24–28 Ago 2026 salvas em crm-db.json`);
+    } catch (e) {
+      console.error("Error writing crm-db.json:", e);
+    }
 
+    // Persist to Supabase Cloud
     try {
       await supabaseServer.from('crm_data').upsert({
         id: 'gpa_angola_main_db',
         payload: currentData,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
+      console.log('☁️ Database synced to Supabase Cloud');
     } catch (sbErr) {
-      console.warn('Supabase sync notice on excel import:', sbErr);
+      console.warn('Supabase sync notice:', sbErr);
+    }
+
+    // Persist to MySQL if configured
+    if (isMySqlConfigured()) {
+      try {
+        await saveCrmDataToMySql(currentData);
+        console.log('🐬 Database synced to cPanel MySQL');
+      } catch (myErr) {
+        console.warn('MySQL sync notice:', myErr);
+      }
     }
 
     return {
       success: true,
-      message: `Importação concluída: ${deals.length} propostas com datas reais ativas no CRM!`,
-      totalDeals: deals.length
+      message: `Sincronização concluída com sucesso: ${finalDeals.length} propostas carregadas até a semana de 24–28 Ago 2026!`,
+      totalDeals: finalDeals.length,
+      totalClients: finalClients.length
     };
   } catch (err: any) {
-    console.error("Erro na importação de Ducumentos:", err);
+    console.error("Erro na sincronização de relatórios:", err);
     return { success: false, error: err.message };
   }
 }
 
-// Automatically import from Ducumentos on startup
-importExcelFromDucumentos().catch(err => console.warn('Excel startup import notice:', err));
+// Automatically sync all reports on startup
+syncAllReportsToDatabase().catch(err => console.warn('Startup reports sync notice:', err));
 
-// GET/POST import Excel from Ducumentos
+// GET/POST import Excel / Reports endpoint
 app.all("/api/import-excel", async (req, res) => {
-  const result = await importExcelFromDucumentos();
+  const result = await syncAllReportsToDatabase();
+  res.json(result);
+});
+
+app.all("/api/sync-all-reports", async (req, res) => {
+  const result = await syncAllReportsToDatabase();
   res.json(result);
 });
 

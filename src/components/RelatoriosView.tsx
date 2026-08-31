@@ -402,6 +402,14 @@ export default function RelatoriosView({
     return val.toString();
   };
 
+  const formatConversao = (conv?: string | number | null) => {
+    if (conv === undefined || conv === null || conv === '') return '—';
+    if (typeof conv === 'number') {
+      return `${(conv * (conv <= 1 ? 100 : 1)).toFixed(1)}%`;
+    }
+    return String(conv);
+  };
+
   // Live Calculations derived from real CRM activity
   const liveTotalDealsCount = deals.length;
   const liveTotalDealsValue = deals.reduce((acc, d) => acc + (d.valor || 0), 0);
@@ -690,125 +698,170 @@ export default function RelatoriosView({
           )}
 
           {/* List of Daily Reports */}
-          {safeDiarios.map((rd) => (
-            <div key={rd.id} className="bg-white border border-gray-400 shadow-sm overflow-hidden font-sans">
-              <div className="bg-[#1B365D] text-white p-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-mono text-amber-300 font-bold uppercase">
-                    RELATÓRIO DIÁRIO INTEGRADO — {new Date(rd.data).toLocaleDateString('pt-AO')}
-                  </div>
-                  <h3 className="text-base font-black tracking-wide font-serif mt-0.5">
-                    {rd.semana}
-                  </h3>
-                </div>
-                <div className="text-right text-xs">
-                  <span className="bg-blue-900 px-2.5 py-1 rounded-2xs font-bold border border-blue-700 text-blue-100">
-                    Compilado por: {rd.comercialNome}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-4 space-y-4 text-xs">
-                
-                {/* Highlights Summary Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 border border-gray-300 rounded-2xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Pipeline Actualizado</span>
-                    <strong className="text-sm font-black text-blue-900">
-                      {new Intl.NumberFormat('pt-AO').format(rd.pipelineTotal)} Kz
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Propostas Emitidas</span>
-                    <strong className="text-sm font-black text-gray-900">
-                      {rd.propostasEmitidasCount} propostas ({new Intl.NumberFormat('pt-AO').format(rd.propostasEmitidasValorTotal)} Kz)
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Adjudicações do Dia</span>
-                    <strong className="text-sm font-black text-emerald-800">
-                      {rd.adjudicacoesCount} adjudicações
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Cobranças & Tesouraria</span>
-                    <span className="text-[11px] font-bold text-gray-700 block truncate">
-                      {rd.cobrancasEfectuadas}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Team activities table */}
-                <div className="border border-gray-300 rounded-2xs overflow-hidden">
-                  <div className="bg-[#0B5C80] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
-                    1. RESUMO DE ACTIVIDADES DA EQUIPA COMERCIAL
-                  </div>
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100 text-gray-800 border-b border-gray-300 font-bold">
-                        <th className="p-2 border-r border-gray-300 w-1/4">Comercial</th>
-                        <th className="p-2">Actividades, Propostas e Visitas de Campo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {(rd.actividadeEquipa || []).map((act, i) => (
-                        <tr key={i} className="hover:bg-blue-50/30">
-                          <td className="p-2 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
-                            {act.comercialNome}
-                          </td>
-                          <td className="p-2 text-gray-800 leading-relaxed">
-                            {act.resumo}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pipeline & Visits Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  
-                  {/* Pipeline highlights */}
-                  <div className="border border-gray-300 rounded-2xs overflow-hidden">
-                    <div className="bg-[#2C4D75] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
-                      2. DESTAQUES DE PIPELINE DE VENDAS
-                    </div>
-                    <ul className="divide-y divide-gray-200 p-2 space-y-1 bg-white">
-                      {rd.pipelineDestaques.map((item, i) => (
-                        <li key={i} className="flex items-center justify-between p-1.5 text-gray-800">
-                          <span className="font-bold text-[#1B365D]">{item.cliente}:</span>
-                          <span className="text-gray-600">{item.descricao}</span>
-                          <strong className="font-mono text-emerald-800">
-                            {new Intl.NumberFormat('pt-AO').format(item.valor)} Kz
-                          </strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Visits realizadas */}
-                  <div className="border border-gray-300 rounded-2xs overflow-hidden">
-                    <div className="bg-[#2C4D75] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
-                      3. VISITAS REALIZADAS NO DIA
-                    </div>
-                    <ul className="divide-y divide-gray-200 p-2 space-y-1 bg-white">
-                      {rd.visitasRealizadas.map((v, i) => (
-                        <li key={i} className="p-1.5 text-gray-800 flex items-start gap-2">
-                          <CheckCircle size={14} className="text-emerald-600 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <strong className="text-gray-900">{v.cliente}: </strong>
-                            <span>{v.descricao}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                </div>
-
-              </div>
+          {safeDiarios.length === 0 ? (
+            <div className="bg-white border border-gray-400 p-8 text-center text-gray-500 font-sans">
+              <Calendar className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="font-bold text-sm">Nenhum relatório diário registado ainda.</p>
+              <p className="text-xs text-gray-400 mt-1">Clique em "Novo Relatório Diário" para adicionar a primeira compilação.</p>
             </div>
-          ))}
+          ) : (
+            safeDiarios.map((rd) => {
+              const pipelineVal = rd?.pipelineTotal || (rd as any)?.valorTotalPropostas || 0;
+              const propostasCount = rd?.propostasEmitidasCount || (rd as any)?.propostasEnviadas || 0;
+              const propostasVal = rd?.propostasEmitidasValorTotal || (rd as any)?.valorTotalPropostas || 0;
+              const adjudicacoes = rd?.adjudicacoesCount || 0;
+              const cobrancas = rd?.cobrancasEfectuadas || (rd as any)?.cobrancasPendentes || 'Sem pendências de cobrança no dia.';
+              const teamActs = Array.isArray(rd?.actividadeEquipa)
+                ? rd.actividadeEquipa
+                : Array.isArray((rd as any)?.logsComerciais)
+                ? (rd as any).logsComerciais
+                : [];
+              const pipelineItems = Array.isArray(rd?.pipelineDestaques) ? rd.pipelineDestaques : [];
+              const visitasItems = Array.isArray(rd?.visitasRealizadas) ? rd.visitasRealizadas : [];
+              const dateDisplay = rd?.data ? new Date(rd.data).toLocaleDateString('pt-AO') : 'Data Recente';
+
+              return (
+                <div key={rd?.id || Math.random()} className="bg-white border border-gray-400 shadow-sm overflow-hidden font-sans">
+                  <div className="bg-[#1B365D] text-white p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-mono text-amber-300 font-bold uppercase">
+                        RELATÓRIO DIÁRIO INTEGRADO — {dateDisplay}
+                      </div>
+                      <h3 className="text-base font-black tracking-wide font-serif mt-0.5">
+                        {rd?.semana || 'Semana em curso'}
+                      </h3>
+                    </div>
+                    <div className="text-right text-xs">
+                      <span className="bg-blue-900 px-2.5 py-1 rounded-2xs font-bold border border-blue-700 text-blue-100">
+                        Compilado por: {rd?.comercialNome || 'Equipa Comercial GPA'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-4 text-xs">
+                    
+                    {/* Highlights Summary Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 border border-gray-300 rounded-2xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 block">Pipeline Actualizado</span>
+                        <strong className="text-sm font-black text-blue-900">
+                          {new Intl.NumberFormat('pt-AO').format(pipelineVal)} Kz
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 block">Propostas Emitidas</span>
+                        <strong className="text-sm font-black text-gray-900">
+                          {propostasCount} propostas ({new Intl.NumberFormat('pt-AO').format(propostasVal)} Kz)
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 block">Adjudicações do Dia</span>
+                        <strong className="text-sm font-black text-emerald-800">
+                          {adjudicacoes} adjudicações
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 block">Cobranças & Tesouraria</span>
+                        <span className="text-[11px] font-bold text-gray-700 block truncate" title={cobrancas}>
+                          {cobrancas}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Team activities table */}
+                    <div className="border border-gray-300 rounded-2xs overflow-hidden">
+                      <div className="bg-[#0B5C80] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
+                        1. RESUMO DE ACTIVIDADES DA EQUIPA COMERCIAL
+                      </div>
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 text-gray-800 border-b border-gray-300 font-bold">
+                            <th className="p-2 border-r border-gray-300 w-1/4">Comercial</th>
+                            <th className="p-2">Actividades, Propostas e Visitas de Campo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {teamActs.length > 0 ? (
+                            teamActs.map((act: any, i: number) => (
+                              <tr key={i} className="hover:bg-blue-50/30">
+                                <td className="p-2 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
+                                  {act?.comercialNome || act?.nome || 'Comercial'}
+                                </td>
+                                <td className="p-2 text-gray-800 leading-relaxed">
+                                  {act?.resumo || act?.descricao || '—'}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={2} className="p-3 text-gray-700 italic">
+                                {(rd as any)?.resumoActividades || 'Atividades diárias registadas pela equipa comercial.'}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pipeline & Visits Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      
+                      {/* Pipeline highlights */}
+                      <div className="border border-gray-300 rounded-2xs overflow-hidden">
+                        <div className="bg-[#2C4D75] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
+                          2. DESTAQUES DE PIPELINE DE VENDAS
+                        </div>
+                        <ul className="divide-y divide-gray-200 p-2 space-y-1 bg-white">
+                          {pipelineItems.length > 0 ? (
+                            pipelineItems.map((item, i) => (
+                              <li key={i} className="flex items-center justify-between p-1.5 text-gray-800">
+                                <span className="font-bold text-[#1B365D]">{item?.cliente || 'Cliente'}:</span>
+                                <span className="text-gray-600">{item?.descricao || 'Proposta'}</span>
+                                <strong className="font-mono text-emerald-800">
+                                  {new Intl.NumberFormat('pt-AO').format(item?.valor || 0)} Kz
+                                </strong>
+                              </li>
+                            ))
+                          ) : (
+                            <li className="p-2 text-gray-500 italic text-[11px]">Sem destaques de pipeline adicionados</li>
+                          )}
+                        </ul>
+                      </div>
+
+                      {/* Visits realizadas */}
+                      <div className="border border-gray-300 rounded-2xs overflow-hidden">
+                        <div className="bg-[#2C4D75] text-white px-3 py-1.5 font-bold uppercase text-[11px]">
+                          3. VISITAS REALIZADAS NO DIA
+                        </div>
+                        <ul className="divide-y divide-gray-200 p-2 space-y-1 bg-white">
+                          {visitasItems.length > 0 ? (
+                            visitasItems.map((v, i) => (
+                              <li key={i} className="p-1.5 text-gray-800 flex items-start gap-2">
+                                <CheckCircle size={14} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                                <div>
+                                  <strong className="text-gray-900">{v?.cliente || 'Cliente'}: </strong>
+                                  <span>{v?.descricao || 'Visita comercial'}</span>
+                                </div>
+                              </li>
+                            ))
+                          ) : typeof (rd as any)?.visitasRealizadas === 'number' ? (
+                            <li className="p-2 text-gray-800 flex items-center gap-2">
+                              <CheckCircle size={14} className="text-emerald-600 flex-shrink-0" />
+                              <span>Total de <strong>{(rd as any).visitasRealizadas}</strong> visitas comerciais realizadas no período.</span>
+                            </li>
+                          ) : (
+                            <li className="p-2 text-gray-500 italic text-[11px]">Nenhuma visita registada neste dia</li>
+                          )}
+                        </ul>
+                      </div>
+
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 
@@ -963,36 +1016,43 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 font-sans text-gray-900">
-                {safeSemanas.map((sem) => (
-                  <tr key={sem.id} className="hover:bg-blue-50/50">
-                    <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">
-                      {sem.rotuloSemana}
-                    </td>
-                    <td className="p-2.5 font-medium border-r border-gray-300">{sem.mes}</td>
-                    <td className="p-2.5 text-center font-bold border-r border-gray-300">{sem.propostas}</td>
-                    <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
-                      {new Intl.NumberFormat('pt-AO').format(sem.valorTotal)} Kz
-                    </td>
-                    <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
-                      {new Intl.NumberFormat('pt-AO').format(sem.valorAprovado)} Kz
-                    </td>
-                    <td className="p-2.5 text-right font-medium border-r border-gray-300">
-                      {new Intl.NumberFormat('pt-AO').format(sem.forecast)} Kz
-                    </td>
-                    <td className="p-2.5 text-center font-black text-blue-900 border-r border-gray-300">
-                      {sem.conversao}
-                    </td>
-                    <td className="p-2.5 text-center">
-                      <span className={`px-2 py-0.5 rounded-2xs text-[10px] font-bold uppercase border ${
-                        sem.autoCompiladoSexta
-                          ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
-                          : 'bg-amber-100 text-amber-950 border-amber-300'
-                      }`}>
-                        {sem.autoCompiladoSexta ? 'Publicado' : 'Em Curso'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {safeSemanas.map((sem) => {
+                  const rotulo = sem?.rotuloSemana || (sem as any)?.rotulo || 'Semana';
+                  const valorTotal = sem?.valorTotal || 0;
+                  const valorAprovado = sem?.valorAprovado || 0;
+                  const forecast = sem?.forecast || 0;
+                  const conversao = formatConversao(sem?.conversao);
+                  return (
+                    <tr key={sem?.id || Math.random()} className="hover:bg-blue-50/50">
+                      <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">
+                        {rotulo}
+                      </td>
+                      <td className="p-2.5 font-medium border-r border-gray-300">{sem?.mes || '—'}</td>
+                      <td className="p-2.5 text-center font-bold border-r border-gray-300">{sem?.propostas || 0}</td>
+                      <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
+                        {new Intl.NumberFormat('pt-AO').format(valorTotal)} Kz
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
+                        {new Intl.NumberFormat('pt-AO').format(valorAprovado)} Kz
+                      </td>
+                      <td className="p-2.5 text-right font-medium border-r border-gray-300">
+                        {new Intl.NumberFormat('pt-AO').format(forecast)} Kz
+                      </td>
+                      <td className="p-2.5 text-center font-black text-blue-900 border-r border-gray-300">
+                        {conversao}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <span className={`px-2 py-0.5 rounded-2xs text-[10px] font-bold uppercase border ${
+                          sem?.autoCompiladoSexta
+                            ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
+                            : 'bg-amber-100 text-amber-950 border-amber-300'
+                        }`}>
+                          {sem?.autoCompiladoSexta ? 'Publicado' : 'Em Curso'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1168,85 +1228,100 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-gray-900 font-sans">
-                {safeMeses.map((m) => (
-                  <tr key={m.id} className="hover:bg-blue-50/50">
-                    <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
-                      {m.mes}
-                    </td>
-                    <td className="p-2.5 text-center font-bold border-r border-gray-300">
-                      {m.totalPropostas > 0 ? m.totalPropostas : '—'}
-                    </td>
-                    <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
-                      {m.valorPropostoTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(m.valorPropostoTotal)} Kz` : '—'}
-                    </td>
-                    <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
-                      {m.valorAprovadoTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(m.valorAprovadoTotal)} Kz` : '—'}
-                    </td>
-                    <td className="p-2.5 text-right font-medium text-blue-900 border-r border-gray-300">
-                      {m.pipelineAberto > 0 ? `${new Intl.NumberFormat('pt-AO').format(m.pipelineAberto)} Kz` : '—'}
-                    </td>
-                    <td className="p-2.5 text-center font-black text-amber-900 border-r border-gray-300">
-                      {m.conversaoMedia || '—'}
-                    </td>
-                    <td className="p-2.5 text-gray-700 text-[11px]">
-                      {Array.isArray(m.semanasIncluidas) && m.semanasIncluidas.length > 0 ? m.semanasIncluidas.join(', ') : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {safeMeses.map((m) => {
+                  const totalProp = m?.totalPropostas || (m as any)?.propostas || 0;
+                  const vProp = m?.valorPropostoTotal || (m as any)?.valorProposto || 0;
+                  const vAprov = m?.valorAprovadoTotal || (m as any)?.valorAprovado || 0;
+                  const pAberto = m?.pipelineAberto || (m as any)?.pipelinePonderado || Math.max(0, vProp - vAprov);
+                  const conv = formatConversao(m?.conversaoMedia || (m as any)?.taxaConversao);
+                  const semanasArr = Array.isArray(m?.semanasIncluidas) ? m.semanasIncluidas : Array.isArray((m as any)?.semanas) ? (m as any).semanas : [];
+                  return (
+                    <tr key={m?.id || Math.random()} className="hover:bg-blue-50/50">
+                      <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300 whitespace-nowrap">
+                        {m?.mes || 'Mês'}
+                      </td>
+                      <td className="p-2.5 text-center font-bold border-r border-gray-300">
+                        {totalProp > 0 ? totalProp : '—'}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
+                        {vProp > 0 ? `${new Intl.NumberFormat('pt-AO').format(vProp)} Kz` : '—'}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
+                        {vAprov > 0 ? `${new Intl.NumberFormat('pt-AO').format(vAprov)} Kz` : '—'}
+                      </td>
+                      <td className="p-2.5 text-right font-medium text-blue-900 border-r border-gray-300">
+                        {pAberto > 0 ? `${new Intl.NumberFormat('pt-AO').format(pAberto)} Kz` : '—'}
+                      </td>
+                      <td className="p-2.5 text-center font-black text-amber-900 border-r border-gray-300">
+                        {conv}
+                      </td>
+                      <td className="p-2.5 text-gray-700 text-[11px]">
+                        {semanasArr.length > 0 ? semanasArr.join(', ') : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Cards Breakdown of Monthly Reports */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {safeMeses.map((mes) => (
-              <div key={mes.id} className="bg-white border border-gray-400 shadow-sm rounded-xs p-4 space-y-3 font-sans">
-                <div className="border-b pb-2 flex items-center justify-between">
-                  <h3 className="text-base font-black text-[#1B365D] font-serif uppercase">
-                    RELATÓRIO MENSAL — {mes.mes}
-                  </h3>
-                  <span className="bg-blue-100 text-blue-900 text-[10px] font-bold px-2 py-0.5 rounded-2xs border border-blue-300">
-                    Gerado por: {mes.geradoPorAdmin}
-                  </span>
+            {safeMeses.map((mes) => {
+              const totalProp = mes?.totalPropostas || (mes as any)?.propostas || 0;
+              const vProp = mes?.valorPropostoTotal || (mes as any)?.valorProposto || 0;
+              const vAprov = mes?.valorAprovadoTotal || (mes as any)?.valorAprovado || 0;
+              const conv = formatConversao(mes?.conversaoMedia || (mes as any)?.taxaConversao);
+              const semanasArr = Array.isArray(mes?.semanasIncluidas) ? mes.semanasIncluidas : Array.isArray((mes as any)?.semanas) ? (mes as any).semanas : [];
+              return (
+                <div key={mes?.id || Math.random()} className="bg-white border border-gray-400 shadow-sm rounded-xs p-4 space-y-3 font-sans">
+                  <div className="border-b pb-2 flex items-center justify-between">
+                    <h3 className="text-base font-black text-[#1B365D] font-serif uppercase">
+                      RELATÓRIO MENSAL — {mes?.mes || 'Mês'}
+                    </h3>
+                    <span className="bg-blue-100 text-blue-900 text-[10px] font-bold px-2 py-0.5 rounded-2xs border border-blue-300">
+                      Gerado por: {mes?.geradoPorAdmin || 'Sistema GPA'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-50 p-2 rounded-2xs border">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Total Propostas</span>
+                      <strong className="text-sm font-bold text-gray-900">{totalProp > 0 ? totalProp : '—'}</strong>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-2xs border">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Valor Proposto</span>
+                      <strong className="text-sm font-bold text-blue-900">
+                        {vProp > 0 ? `${new Intl.NumberFormat('pt-AO').format(vProp)} Kz` : '—'}
+                      </strong>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-2xs border">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Valor Aprovado</span>
+                      <strong className="text-sm font-bold text-emerald-800">
+                        {vAprov > 0 ? `${new Intl.NumberFormat('pt-AO').format(vAprov)} Kz` : '—'}
+                      </strong>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-2xs border">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Conversão Média</span>
+                      <strong className="text-sm font-black text-amber-900">{conv}</strong>
+                    </div>
+                  </div>
+
+                  <div className="text-xs pt-1 border-t flex items-center justify-between text-gray-600">
+                    <span>Semanas Incluídas: {semanasArr.length > 0 ? semanasArr.join(', ') : '—'}</span>
+                    <button
+                      onClick={handlePrint}
+                      className="text-[#1B365D] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Printer size={12} /> Imprimir PDF
+                    </button>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2 rounded-2xs border">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Total Propostas</span>
-                    <strong className="text-sm font-bold text-gray-900">{mes.totalPropostas > 0 ? mes.totalPropostas : '—'}</strong>
-                  </div>
-
-                  <div className="bg-slate-50 p-2 rounded-2xs border">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Valor Proposto</span>
-                    <strong className="text-sm font-bold text-blue-900">
-                      {mes.valorPropostoTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(mes.valorPropostoTotal)} Kz` : '—'}
-                    </strong>
-                  </div>
-
-                  <div className="bg-slate-50 p-2 rounded-2xs border">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Valor Aprovado</span>
-                    <strong className="text-sm font-bold text-emerald-800">
-                      {mes.valorAprovadoTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(mes.valorAprovadoTotal)} Kz` : '—'}
-                    </strong>
-                  </div>
-
-                  <div className="bg-slate-50 p-2 rounded-2xs border">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Conversão Média</span>
-                    <strong className="text-sm font-black text-amber-900">{mes.conversaoMedia || '—'}</strong>
-                  </div>
-                </div>
-
-                <div className="text-xs pt-1 border-t flex items-center justify-between text-gray-600">
-                  <span>Semanas Incluídas: {Array.isArray(mes.semanasIncluidas) ? mes.semanasIncluidas.join(', ') : '—'}</span>
-                  <button
-                    onClick={handlePrint}
-                    className="text-[#1B365D] font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Printer size={12} /> Imprimir PDF
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Weekly Breakdown Table for Full Clarity */}
@@ -1268,20 +1343,26 @@ export default function RelatoriosView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-gray-900 font-sans">
-                {safeSemanas.map((sem) => (
-                  <tr key={sem.id} className="hover:bg-blue-50/50">
-                    <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">{sem.rotuloSemana}</td>
-                    <td className="p-2.5 border-r border-gray-300 font-medium">{sem.mes}</td>
-                    <td className="p-2.5 text-center font-bold border-r border-gray-300">{sem.propostas > 0 ? sem.propostas : '—'}</td>
-                    <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
-                      {sem.valorTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(sem.valorTotal)} Kz` : '—'}
-                    </td>
-                    <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
-                      {sem.valorAprovado > 0 ? `${new Intl.NumberFormat('pt-AO').format(sem.valorAprovado)} Kz` : '—'}
-                    </td>
-                    <td className="p-2.5 text-center font-black text-blue-900">{sem.conversao || '—'}</td>
-                  </tr>
-                ))}
+                {safeSemanas.map((sem) => {
+                  const rotulo = sem?.rotuloSemana || (sem as any)?.rotulo || 'Semana';
+                  const valorTotal = sem?.valorTotal || 0;
+                  const valorAprovado = sem?.valorAprovado || 0;
+                  const conversao = formatConversao(sem?.conversao);
+                  return (
+                    <tr key={sem?.id || Math.random()} className="hover:bg-blue-50/50">
+                      <td className="p-2.5 font-bold text-[#1B365D] border-r border-gray-300">{rotulo}</td>
+                      <td className="p-2.5 border-r border-gray-300 font-medium">{sem?.mes || '—'}</td>
+                      <td className="p-2.5 text-center font-bold border-r border-gray-300">{sem?.propostas || 0}</td>
+                      <td className="p-2.5 text-right font-bold text-gray-900 border-r border-gray-300">
+                        {valorTotal > 0 ? `${new Intl.NumberFormat('pt-AO').format(valorTotal)} Kz` : '—'}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
+                        {valorAprovado > 0 ? `${new Intl.NumberFormat('pt-AO').format(valorAprovado)} Kz` : '—'}
+                      </td>
+                      <td className="p-2.5 text-center font-black text-blue-900">{conversao}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1453,7 +1534,7 @@ export default function RelatoriosView({
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Taxa de Conversão (% Fecho)</td>
                     {fourWeeks.map((w, idx) => (
                       <td key={idx} className="p-2.5 text-center font-black text-blue-900 border-r border-gray-300">
-                        {w?.conversao || '—'}
+                        {formatConversao(w?.conversao)}
                       </td>
                     ))}
                   </tr>
@@ -1497,14 +1578,17 @@ export default function RelatoriosView({
                 <thead>
                   <tr className="bg-[#0B5C80] text-white font-bold border-b border-[#084560]">
                     <th className="p-3 border-r border-[#1B7099] w-1/5">Métricas Executivas</th>
-                    {fourMonths.map((m, idx) => (
-                      <th key={m?.id || idx} className="p-3 text-center border-r border-[#1B7099] w-1/5">
-                        <div className="font-serif text-sm font-black text-amber-300">{m?.mes || `Mês ${idx + 1}`}</div>
-                        <div className="text-[10px] text-blue-100 font-normal">
-                          {m?.semanasIncluidas?.length ? `${m.semanasIncluidas.length} Semanas` : '—'}
-                        </div>
-                      </th>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const semanasArr = Array.isArray(m?.semanasIncluidas) ? m.semanasIncluidas : Array.isArray((m as any)?.semanas) ? (m as any).semanas : [];
+                      return (
+                        <th key={m?.id || idx} className="p-3 text-center border-r border-[#1B7099] w-1/5">
+                          <div className="font-serif text-sm font-black text-amber-300">{m?.mes || `Mês ${idx + 1}`}</div>
+                          <div className="text-[10px] text-blue-100 font-normal">
+                            {semanasArr.length ? `${semanasArr.length} Semanas` : '—'}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-300 font-sans text-gray-900">
@@ -1529,41 +1613,53 @@ export default function RelatoriosView({
                   {/* Total Propostas Row */}
                   <tr className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Total Propostas Submetidas</td>
-                    {fourMonths.map((m, idx) => (
-                      <td key={idx} className="p-2.5 text-center font-bold text-gray-900 border-r border-gray-300">
-                        {formatNumberOrEmpty(m?.totalPropostas)}
-                      </td>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const totalProp = m?.totalPropostas || (m as any)?.propostas || 0;
+                      return (
+                        <td key={idx} className="p-2.5 text-center font-bold text-gray-900 border-r border-gray-300">
+                          {formatNumberOrEmpty(totalProp)}
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* Valor Proposto Row */}
                   <tr className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Valor Proposto Acumulado (AOA)</td>
-                    {fourMonths.map((m, idx) => (
-                      <td key={idx} className="p-2.5 text-right font-bold text-blue-900 border-r border-gray-300">
-                        {formatKzOrEmpty(m?.valorPropostoTotal)}
-                      </td>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const vProp = m?.valorPropostoTotal || (m as any)?.valorProposto || 0;
+                      return (
+                        <td key={idx} className="p-2.5 text-right font-bold text-blue-900 border-r border-gray-300">
+                          {formatKzOrEmpty(vProp)}
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* Valor Aprovado Row */}
                   <tr className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Valor Aprovado / Fechado (AOA)</td>
-                    {fourMonths.map((m, idx) => (
-                      <td key={idx} className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
-                        {formatKzOrEmpty(m?.valorAprovadoTotal)}
-                      </td>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const vAprov = m?.valorAprovadoTotal || (m as any)?.valorAprovado || 0;
+                      return (
+                        <td key={idx} className="p-2.5 text-right font-bold text-emerald-800 border-r border-gray-300">
+                          {formatKzOrEmpty(vAprov)}
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* Pipeline Aberto Row */}
                   <tr className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Pipeline em Aberto (AOA)</td>
-                    {fourMonths.map((m, idx) => (
-                      <td key={idx} className="p-2.5 text-right font-medium text-blue-900 border-r border-gray-300">
-                        {formatKzOrEmpty(m?.pipelineAberto)}
-                      </td>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const pAberto = m?.pipelineAberto || (m as any)?.pipelinePonderado || 0;
+                      return (
+                        <td key={idx} className="p-2.5 text-right font-medium text-blue-900 border-r border-gray-300">
+                          {formatKzOrEmpty(pAberto)}
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* Forecast Row */}
@@ -1581,7 +1677,7 @@ export default function RelatoriosView({
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Taxa de Conversão Média</td>
                     {fourMonths.map((m, idx) => (
                       <td key={idx} className="p-2.5 text-center font-black text-amber-900 border-r border-gray-300">
-                        {m?.conversaoMedia || '—'}
+                        {formatConversao(m?.conversaoMedia || (m as any)?.taxaConversao)}
                       </td>
                     ))}
                   </tr>
@@ -1589,11 +1685,14 @@ export default function RelatoriosView({
                   {/* Semanas Incluidas Row */}
                   <tr className="hover:bg-blue-50/50">
                     <td className="p-2.5 font-bold text-gray-900 border-r border-gray-300">Semanas Integradas</td>
-                    {fourMonths.map((m, idx) => (
-                      <td key={idx} className="p-2.5 text-center text-gray-600 text-[11px] border-r border-gray-300">
-                        {m?.semanasIncluidas?.length ? m.semanasIncluidas.join(', ') : '—'}
-                      </td>
-                    ))}
+                    {fourMonths.map((m, idx) => {
+                      const semanasArr = Array.isArray(m?.semanasIncluidas) ? m.semanasIncluidas : Array.isArray((m as any)?.semanas) ? (m as any).semanas : [];
+                      return (
+                        <td key={idx} className="p-2.5 text-center text-gray-600 text-[11px] border-r border-gray-300">
+                          {semanasArr.length ? semanasArr.join(', ') : '—'}
+                        </td>
+                      );
+                    })}
                   </tr>
                 </tbody>
               </table>
@@ -1696,40 +1795,43 @@ export default function RelatoriosView({
         }> = [];
 
         // 1. Deals
-        deals.forEach(d => {
+        (deals || []).forEach(d => {
+          if (!d) return;
           const isDone = d.etapa === 'fechado' || d.etapa === 'producao';
           const isLost = d.etapa === 'perdido';
           compiledActivities.push({
-            id: d.id,
+            id: d.id || `deal_${Math.random()}`,
             data: d.dataEnvio || d.semana || '2026-08-10',
             tipo: 'Proposta Comercial',
-            cliente: d.clienteNome,
+            cliente: d.clienteNome || 'Cliente',
             gestor: d.comercialNome || 'Comercial',
-            gestorId: d.comercialId,
-            descricao: d.titulo || `Proposta Comercial ${d.clienteNome}`,
+            gestorId: d.comercialId || '',
+            descricao: d.titulo || `Proposta Comercial ${d.clienteNome || ''}`,
             estadoLabel: isDone ? 'FEITA (Concluída)' : (isLost ? 'NÃO FEITA (Perdida)' : 'NÃO FEITA (Pendente)'),
             isFeita: isDone,
             valor: d.valor || 0,
-            observacoes: d.observacoes || `Etapa: ${d.etapa.toUpperCase()}`
+            observacoes: d.observacoes || `Etapa: ${(d.etapa || '').toUpperCase()}`
           });
         });
 
         // 2. Daily team logs
-        relatoriosDiarios.forEach(rd => {
-          (rd.actividadeEquipa || []).forEach((act, idx) => {
-            if (act.resumo && act.resumo.trim() !== '') {
+        (relatoriosDiarios || []).forEach(rd => {
+          if (!rd) return;
+          const teamActs = Array.isArray(rd.actividadeEquipa) ? rd.actividadeEquipa : Array.isArray((rd as any).logsComerciais) ? (rd as any).logsComerciais : [];
+          teamActs.forEach((act: any, idx: number) => {
+            if (act && act.resumo && String(act.resumo).trim() !== '') {
               compiledActivities.push({
-                id: `act_rd_${rd.id}_${idx}`,
-                data: rd.data,
+                id: `act_rd_${rd.id || Math.random()}_${idx}`,
+                data: rd.data || '2026-08-10',
                 tipo: 'Relatório Diário',
                 cliente: 'Interno GPA',
-                gestor: act.comercialNome,
-                gestorId: act.comercialNome,
-                descricao: act.resumo,
+                gestor: act.comercialNome || act.nome || 'Comercial',
+                gestorId: act.comercialNome || act.nome || 'Comercial',
+                descricao: act.resumo || act.descricao || 'Atividade',
                 estadoLabel: 'FEITA (Concluída)',
                 isFeita: true,
                 valor: 0,
-                observacoes: `Registo de atividade diária (${rd.semana})`
+                observacoes: `Registo de atividade diária (${rd.semana || ''})`
               });
             }
           });
@@ -1739,8 +1841,10 @@ export default function RelatoriosView({
         const filteredActivities = compiledActivities.filter(a => {
           // Comercial filter
           if (actFiltroComercial !== 'todos') {
-            const matchesCom = (a.gestorId === actFiltroComercial) || 
-              (a.gestor.toLowerCase().includes(actFiltroComercial.toLowerCase()));
+            const comFilterLower = (actFiltroComercial || '').toLowerCase().trim();
+            const gestorLower = (a.gestor || '').toLowerCase().trim();
+            const matchesCom = (a.gestorId && a.gestorId === actFiltroComercial) || 
+              (gestorLower !== '' && gestorLower.includes(comFilterLower));
             if (!matchesCom) return false;
           }
 

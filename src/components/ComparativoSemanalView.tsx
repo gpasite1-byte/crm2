@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Deal, Usuario, isUserCommercial } from '../types';
-import { BarChart3, Calendar, TrendingUp, ArrowUpRight, ArrowDownRight, Layers, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { BarChart3, Calendar, TrendingUp, ArrowUpRight, ArrowDownRight, Layers, FileSpreadsheet, CheckCircle2, RefreshCw } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -11,7 +11,7 @@ import {
   Legend,
   CartesianGrid
 } from 'recharts';
-import { generateDynamicWeeklyTimeline } from '../utils/periodEngine';
+import { generateDynamicWeeklyTimeline, parseDateFlexible } from '../utils/periodEngine';
 import { baseDuasSemanasData } from '../data/baseDuasSemanasData';
 
 import GlobalPeriodBar from './GlobalPeriodBar';
@@ -51,6 +51,29 @@ export default function ComparativoSemanalView({
   onOpenExcelImport
 }: ComparativoSemanalViewProps) {
   const [metricTab, setMetricTab] = useState<'proposto' | 'aprovado' | 'propostas'>('proposto');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+
+  const handleSyncAllReports = async () => {
+    setIsSyncing(true);
+    setSyncStatusMsg(null);
+    try {
+      const res = await fetch('/api/sync-all-reports', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSyncStatusMsg(`✅ ${data.totalDeals} propostas sincronizadas até 24–28 Ago 2026!`);
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setSyncStatusMsg(`⚠️ ${data.error || 'Erro na sincronização'}`);
+      }
+    } catch (e: any) {
+      setSyncStatusMsg(`⚠️ Falha ao sincronizar: ${e.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Modal para adicionar proposta / registo manual diretamente no Comparativo Semanal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -157,12 +180,16 @@ export default function ComparativoSemanalView({
     return generateDynamicWeeklyTimeline(allDeals, comerciais, refDate || new Date());
   }, [allDeals, comerciais, refDate]);
 
-  // Always display the last 8 weeks so that users can see "missing" weeks and add data to them
+  // Display all weeks that have proposals/activity or current week, sorted chronologically
   const displayBuckets = useMemo(() => {
+    const withData = weeklyBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0 || b.isCurrentWeek);
+    if (withData.length >= 2) {
+      return withData;
+    }
     return weeklyBuckets.slice(-8);
   }, [weeklyBuckets]);
 
-  // Latest 2 weeks for direct comparison (Only pick weeks that actually have data)
+  // Latest 2 weeks for direct comparison (e.g. 17-21 Ago vs 24-28 Ago)
   const latestTwoWeeks = useMemo(() => {
     const weeksWithData = weeklyBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0);
     if (weeksWithData.length >= 2) {
@@ -244,6 +271,16 @@ export default function ComparativoSemanalView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleSyncAllReports}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow-md cursor-pointer"
+            title="Recarregar e sincronizar relatórios semanais até 24–28 Ago 2026"
+          >
+            <RefreshCw size={15} className={isSyncing ? "animate-spin" : ""} />
+            <span>{isSyncing ? "A Sincronizar..." : "Sincronizar Relatórios (até 28 Ago)"}</span>
+          </button>
+
           {onOpenExcelImport && (
             <button
               onClick={onOpenExcelImport}
@@ -284,6 +321,13 @@ export default function ComparativoSemanalView({
           </div>
         </div>
       </div>
+
+      {syncStatusMsg && (
+        <div className="bg-emerald-900/90 border border-emerald-500 text-emerald-100 p-3 rounded-lg text-xs font-bold flex items-center justify-between animate-fade-in shadow-md">
+          <span>{syncStatusMsg}</span>
+          <button onClick={() => setSyncStatusMsg(null)} className="text-emerald-300 hover:text-white font-bold ml-2">✕</button>
+        </div>
+      )}
 
       {/* MODAL MANUAL ADICIONAR REGISTO SEMANAL */}
       {isAddModalOpen && (
@@ -826,29 +870,34 @@ export default function ComparativoSemanalView({
 
         const comerciaisLabels = [...new Set(allDeals.map(d => d.comercialNome || 'Sem atribuição'))].filter(Boolean).slice(0, 8);
 
+        const isDealInWeek = (d: Deal, b: any) => {
+          if (!b) return false;
+          const dDate = parseDateFlexible(d.dataEnvio) || parseDateFlexible(d.semana);
+          if (!dDate) return false;
+          const start = b.startDate ? new Date(b.startDate).getTime() : 0;
+          const end = b.endDate ? new Date(b.endDate).getTime() + (2 * 86400000) : 0; // extend to Sunday
+          return dDate.getTime() >= start && dDate.getTime() <= end;
+        };
+
         const chartDataComercial = comerciaisLabels.map(nome => {
-          const dealsComercial = allDeals.filter(d => (d.comercialNome || '') === nome);
-          const dealsAnterior = semAnterior
-            ? dealsComercial.filter(d => d.semana && d.semana.includes(semAnterior.label.split(' (')[0]))
-            : [];
-          const dealsFinda = semFinda
-            ? dealsComercial.filter(d => d.semana && d.semana.includes(semFinda.label.split(' (')[0]))
-            : [];
+          const dealsComercial = allDeals.filter(d => (d.comercialNome || '').toLowerCase().includes(nome.toLowerCase().split(' ')[0]));
+          const dealsAnterior = semAnterior ? dealsComercial.filter(d => isDealInWeek(d, semAnterior)) : [];
+          const dealsFinda = semFinda ? dealsComercial.filter(d => isDealInWeek(d, semFinda)) : [];
 
           return {
             nome: nome.split(' ')[0] + (nome.split(' ')[1] ? ' ' + nome.split(' ')[1] : ''),
             nomeCompleto: nome,
             propostasAnterior: dealsAnterior.length,
-            propostasFinda: dealsFinda.length || dealsComercial.filter((_, i) => i % 2 === 0).length,
+            propostasFinda: dealsFinda.length,
             valorAnterior: dealsAnterior.reduce((s, d) => s + Number(d.valor || 0), 0),
-            valorFinda: dealsFinda.reduce((s, d) => s + Number(d.valor || 0), 0) || dealsComercial.filter((_, i) => i % 2 !== 0).reduce((s, d) => s + Number(d.valor || 0), 0),
+            valorFinda: dealsFinda.reduce((s, d) => s + Number(d.valor || 0), 0),
             aprovadoAnterior: dealsAnterior.reduce((s, d) => s + Number(d.valorAprovado || 0), 0),
-            aprovadoFinda: dealsFinda.reduce((s, d) => s + Number(d.valorAprovado || 0), 0) || dealsComercial.filter((_, i) => i % 2 !== 0).reduce((s, d) => s + Number(d.valorAprovado || 0), 0),
+            aprovadoFinda: dealsFinda.reduce((s, d) => s + Number(d.valorAprovado || 0), 0),
           };
         });
 
-        const labelAnterior = semAnterior ? semAnterior.label.split(' (')[0] : 'Semana Anterior';
-        const labelFinda = semFinda ? semFinda.label.split(' (')[0] : 'Semana Finda';
+        const labelAnterior = semAnterior ? semAnterior.label.split(' (')[0] : '17–21 Ago 2026';
+        const labelFinda = semFinda ? semFinda.label.split(' (')[0] : '24–28 Ago 2026';
 
         return (
           <div className="bg-white p-5 rounded-xl border border-gray-300 shadow-md space-y-3">

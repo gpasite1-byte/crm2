@@ -6926,100 +6926,133 @@ export const initialRelatoriosDiarios: RelatorioDiario[] = [
     "data": "2026-08-21",
     "semana": "17–21 Ago 2026",
     "comercialNome": "Equipa Comercial GPA",
-    "resumoActividades": "Fecho da semana comercial com 66 propostas e 44.3M Kz aprovados.",
-    "propostasEnviadas": 66,
-    "valorTotalPropostas": 399761336.36,
-    "visitasRealizadas": 30,
-    "cobrancasPendentes": "Sem pendências críticas.",
-    "observacoesGerais": "Cumprimento expressivo com 744% de crescimento em aprovações vs semana anterior.",
-    "logsComerciais": []
+    "actividadeEquipa": [
+      { "comercialNome": "Luísa Baltazar", "resumo": "Acompanhamento e envio de propostas para AGT e Sonangol." },
+      { "comercialNome": "Amélia Cassinda", "resumo": "Visitas a clientes corporativos e negociação de contratos." },
+      { "comercialNome": "Marta de Oliveira", "resumo": "Apresentação comercial e elaboração de orçamentos." },
+      { "comercialNome": "David Guedes", "resumo": "Prospecção de novos clientes e fecho de propostas em carteira." },
+      { "comercialNome": "Carlos Francisco", "resumo": "Reuniões comerciais e acompanhamento pós-venda." },
+      { "comercialNome": "Ilídio Pedro", "resumo": "Levantamento de necessidades e entrega de amostras." }
+    ],
+    "pipelineTotal": 399761336.36,
+    "pipelineDestaques": [
+      { "cliente": "AGT", "valor": 50074500, "descricao": "Livros promocionais e materiais institucionais" },
+      { "cliente": "SONILS", "valor": 62061600, "descricao": "Caixas Led e Sinalética Corporativa" }
+    ],
+    "visitasRealizadas": [
+      { "cliente": "Sonangol E.P.", "descricao": "Acompanhamento comercial e alinhamento de projeto" },
+      { "cliente": "ENDIAMA", "descricao": "Entrega de protótipos e apresentação de catálogo" }
+    ],
+    "propostasEmitidasCount": 66,
+    "propostasEmitidasValorTotal": 399761336.36,
+    "propostasEmitidasDestaques": [
+      { "cliente": "ACCESS BANK", "valor": 5176740, "descricao": "Brindes executivos e agendas corporativas" }
+    ],
+    "adjudicacoesCount": 12,
+    "cobrancasEfectuadas": "Sem pendências críticas de cobrança no dia.",
+    "observacoes": "Cumprimento expressivo com 744% de crescimento em aprovações vs semana anterior.",
+    "criadoEm": new Date().toISOString()
   }
 ];
 
 export const initialHistoricoSemanas: HistoricoSemanal[] = [
   {
     "id": "sem_jul_w1",
-    "rotulo": "06–10 Jul 2026",
+    "rotuloSemana": "06–10 Jul 2026",
     "mes": "Julho 2026",
     "propostas": 29,
     "valorTotal": 150282285.88,
     "valorAprovado": 19914950,
     "valorPerdido": 11779700,
     "forecast": 76353142.04,
-    "conversao": 0.1325,
-    "visitas": 14
+    "conversao": "13.2%",
+    "ticketMedio": 5182147,
+    "visitasTotal": 14,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_jul_w2",
-    "rotulo": "13–17 Jul 2026",
+    "rotuloSemana": "13–17 Jul 2026",
     "mes": "Julho 2026",
     "propostas": 32,
     "valorTotal": 263450431.5,
     "valorAprovado": 26762350,
     "valorPerdido": 11712075,
     "forecast": 123115722.45,
-    "conversao": 0.1016,
-    "visitas": 18
+    "conversao": "10.2%",
+    "ticketMedio": 8232825,
+    "visitasTotal": 18,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_jul_w3",
-    "rotulo": "20–24 Jul 2026",
+    "rotuloSemana": "20–24 Jul 2026",
     "mes": "Julho 2026",
     "propostas": 24,
     "valorTotal": 259946674.5,
     "valorAprovado": 50450557,
     "valorPerdido": 25869353,
     "forecast": 121034255.83,
-    "conversao": 0.1941,
-    "visitas": 16
+    "conversao": "19.4%",
+    "ticketMedio": 10831111,
+    "visitasTotal": 16,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_jul_w4",
-    "rotulo": "27–31 Jul 2026",
+    "rotuloSemana": "27–31 Jul 2026",
     "mes": "Julho 2026",
     "propostas": 16,
     "valorTotal": 100153307.64,
     "valorAprovado": 4225680,
     "valorPerdido": 0,
     "forecast": 50152308,
-    "conversao": 0.0422,
-    "visitas": 12
+    "conversao": "4.2%",
+    "ticketMedio": 6259581,
+    "visitasTotal": 12,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_ago_w1",
-    "rotulo": "03–07 Ago 2026",
+    "rotuloSemana": "03–07 Ago 2026",
     "mes": "Agosto 2026",
     "propostas": 37,
     "valorTotal": 586709914.8,
     "valorAprovado": 24712812,
     "valorPerdido": 2095320,
     "forecast": 229887731.88,
-    "conversao": 0.0421,
-    "visitas": 21
+    "conversao": "4.2%",
+    "ticketMedio": 15857024,
+    "visitasTotal": 21,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_ago_w2",
-    "rotulo": "10–14 Ago 2026",
+    "rotuloSemana": "10–14 Ago 2026",
     "mes": "Agosto 2026",
     "propostas": 39,
     "valorTotal": 631254212.23,
     "valorAprovado": 5949044.59,
     "valorPerdido": 19397385,
     "forecast": 220995706.35,
-    "conversao": 0.0094,
-    "visitas": 25
+    "conversao": "0.9%",
+    "ticketMedio": 16186005,
+    "visitasTotal": 25,
+    "autoCompiladoSexta": true
   },
   {
     "id": "sem_ago_w3",
-    "rotulo": "17–21 Ago 2026",
+    "rotuloSemana": "17–21 Ago 2026",
     "mes": "Agosto 2026",
     "propostas": 66,
     "valorTotal": 399761336.36,
     "valorAprovado": 44313860,
     "valorPerdido": 31362263.64,
     "forecast": 167430176.13,
-    "conversao": 0.1109,
-    "visitas": 30
+    "conversao": "11.1%",
+    "ticketMedio": 6056990,
+    "visitasTotal": 30,
+    "autoCompiladoSexta": true
   }
 ];
 
@@ -7027,51 +7060,60 @@ export const initialHistoricoMeses: HistoricoMensal[] = [
   {
     "id": "mes_junho_2026",
     "mes": "Junho 2026",
-    "propostas": 113,
-    "valorProposto": 754845125.74,
-    "valorAprovado": 57094129.62,
-    "valorPerdido": 26060058.1,
-    "taxaConversao": 0.0756,
-    "pipelinePonderado": 285400190,
-    "semanas": [
+    "totalPropostas": 113,
+    "valorPropostoTotal": 754845125.74,
+    "valorAprovadoTotal": 57094129.62,
+    "valorPerdidoTotal": 26060058.1,
+    "pipelineAberto": 671690938.02,
+    "forecast": 285400190,
+    "conversaoMedia": "7.6%",
+    "semanasIncluidas": [
       "01–05 Jun",
       "08–12 Jun",
       "15–19 Jun",
       "22–26 Jun",
       "29–30 Jun"
-    ]
+    ],
+    "geradoPorAdmin": "Sistema GPA",
+    "dataGeracao": new Date().toISOString()
   },
   {
     "id": "mes_julho_2026",
     "mes": "Julho 2026",
-    "propostas": 110,
-    "valorProposto": 773832699.52,
-    "valorAprovado": 101353537,
-    "valorPerdido": 49361128,
-    "taxaConversao": 0.131,
-    "pipelinePonderado": 370655428.32,
-    "semanas": [
+    "totalPropostas": 110,
+    "valorPropostoTotal": 773832699.52,
+    "valorAprovadoTotal": 101353537,
+    "valorPerdidoTotal": 49361128,
+    "pipelineAberto": 623118034.52,
+    "forecast": 370655428.32,
+    "conversaoMedia": "13.1%",
+    "semanasIncluidas": [
       "06–10 Jul",
       "13–17 Jul",
       "20–24 Jul",
       "27–31 Jul"
-    ]
+    ],
+    "geradoPorAdmin": "Sistema GPA",
+    "dataGeracao": new Date().toISOString()
   },
   {
     "id": "mes_agosto_2026",
     "mes": "Agosto 2026",
-    "propostas": 142,
-    "valorProposto": 1617725463.39,
-    "valorAprovado": 74975716.59,
-    "valorPerdido": 52854968.64,
-    "taxaConversao": 0.0463,
-    "pipelinePonderado": 618313614.36,
-    "semanas": [
+    "totalPropostas": 142,
+    "valorPropostoTotal": 1617725463.39,
+    "valorAprovadoTotal": 74975716.59,
+    "valorPerdidoTotal": 52854968.64,
+    "pipelineAberto": 1489894778.16,
+    "forecast": 618313614.36,
+    "conversaoMedia": "4.6%",
+    "semanasIncluidas": [
       "03–07 Ago",
       "10–14 Ago",
       "17–21 Ago",
       "24–28 Ago"
-    ]
+    ],
+    "geradoPorAdmin": "Sistema GPA",
+    "dataGeracao": new Date().toISOString()
   }
 ];
 

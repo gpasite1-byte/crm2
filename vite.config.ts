@@ -25,6 +25,16 @@ if (fs.existsSync(rootVideosDir)) {
   }
 }
 
+// Automatically synchronize all GPA reports from RELATORIO CRM GPA & Ducumentos up to 24–28 Ago 2026
+try {
+  const syncScript = path.resolve(__dirname, 'scripts', 'sync_to_db_and_data.cjs');
+  if (fs.existsSync(syncScript)) {
+    require(syncScript);
+  }
+} catch (syncErr) {
+  console.warn('Auto-sync report notice:', syncErr);
+}
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
