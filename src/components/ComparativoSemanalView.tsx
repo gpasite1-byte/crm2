@@ -182,19 +182,15 @@ export default function ComparativoSemanalView({
 
   // Display strictly valid weeks that have proposals/activity or current week, sorted chronologically
   const displayBuckets = useMemo(() => {
-    const validBuckets = weeklyBuckets.filter(b => {
+    return weeklyBuckets.filter(b => {
       const yr = b.startDate ? b.startDate.getFullYear() : 2026;
       if (yr < 2025 || yr > 2027) return false;
-      // Exclude empty future weeks with zero activity to prevent confusing charts
-      if (b.isFutureWeek && b.propostasCount === 0 && b.valorProposto === 0 && b.valorAprovado === 0) {
+      // Strictly exclude any week with 0 activity (0 propostas e 0 Kz) unless it is the active current week
+      if (b.propostasCount === 0 && b.valorProposto === 0 && b.valorAprovado === 0 && !b.isCurrentWeek) {
         return false;
       }
-      return b.propostasCount > 0 || b.valorProposto > 0 || b.valorAprovado > 0 || b.isCurrentWeek;
+      return true;
     });
-    if (validBuckets.length >= 1) {
-      return validBuckets;
-    }
-    return weeklyBuckets.filter(b => b.isCurrentWeek || b.propostasCount > 0);
   }, [weeklyBuckets]);
 
   // Latest 2 weeks for direct comparison (e.g. 17-21 Ago vs 24-28 Ago)

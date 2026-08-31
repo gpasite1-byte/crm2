@@ -548,18 +548,18 @@ export function generateDynamicWeeklyTimeline(
     };
   });
 
-  // Calcular variação % em relação à semana anterior
+  // Calculate variations between consecutive active weeks
   for (let i = 1; i < buckets.length; i++) {
-    const prev = buckets[i - 1].valorAprovado;
-    const curr = buckets[i].valorAprovado;
-    if (prev > 0) {
-      buckets[i].variacaoAprovadoPct = ((curr - prev) / prev) * 100;
-    } else if (curr > 0) {
-      buckets[i].variacaoAprovadoPct = 100;
+    const prev = buckets[i - 1];
+    const curr = buckets[i];
+    if (prev.valorAprovado > 0) {
+      curr.variacaoAprovadoPct = ((curr.valorAprovado - prev.valorAprovado) / prev.valorAprovado) * 100;
     }
   }
 
-  return buckets;
+  // Strictly filter out any empty week with zero activity (except current active week)
+  const activeBuckets = buckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0 || b.valorAprovado > 0 || b.isCurrentWeek);
+  return activeBuckets.length > 0 ? activeBuckets : buckets;
 }
 
 /**
