@@ -608,6 +608,145 @@ function getCrmData() {
   return initialData;
 }
 
+// ----------------------------------------------------
+// REST API ENDPOINTS FOR CRM DATA & USER MANAGEMENT
+// ----------------------------------------------------
+app.get("/api/crm-data", async (req, res) => {
+  try {
+    let data = getCrmData();
+    // Merge latest from Supabase if reachable
+    try {
+      const { data: sbData, error } = await supabaseServer
+        .from("crm_data")
+        .select("payload")
+        .eq("id", "gpa_angola_main_db")
+        .single();
+      if (!error && sbData?.payload) {
+        data = { ...data, ...sbData.payload };
+      }
+    } catch (e) {}
+
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/crm-data", async (req, res) => {
+  try {
+    const incoming = req.body;
+    if (!incoming) return res.status(400).json({ error: "Payload vazio" });
+
+    // Save to local crm-db.json
+    try {
+      fs.writeFileSync(CRM_DB_FILE, JSON.stringify(incoming, null, 2), "utf-8");
+    } catch (fsErr) {
+      console.warn("Aviso ao guardar crm-db.json:", fsErr);
+    }
+
+    // Save to Supabase
+    try {
+      await supabaseServer.from("crm_data").upsert({
+        id: "gpa_angola_main_db",
+        payload: incoming,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "id" });
+    } catch (sbErr) {
+      console.warn("Aviso ao sincronizar Supabase:", sbErr);
+    }
+
+    // Save to cPanel MySQL if configured
+    if (isMySqlConfigured()) {
+      saveCrmDataToMySql(incoming).catch(console.warn);
+    }
+
+    broadcastWS({ type: "CRM_DATA_UPDATE", payload: incoming });
+    await broadcastFailover("CRM_DATA_UPDATE", { timestamp: Date.now() });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/users/toggle-block", async (req, res) => {
+  try {
+    const { id, status } = req.body || {};
+    if (!id) return res.status(400).json({ error: "ID do utilizador em falta" });
+
+    const currentData = getCrmData();
+    let updatedStatus = status || "ativo";
+
+    if (Array.isArray(currentData.comerciais)) {
+      currentData.comerciais = currentData.comerciais.map((u: any) => {
+        if (u.id === id) {
+          const currentBlocked = String(u.status || "").toLowerCase().trim() === "bloqueado" || String(u.status || "").toLowerCase().trim() === "inativo";
+          updatedStatus = status ? status : (currentBlocked ? "ativo" : "bloqueado");
+          return { ...u, status: updatedStatus };
+        }
+        return u;
+      });
+
+      try {
+        fs.writeFileSync(CRM_DB_FILE, JSON.stringify(currentData, null, 2), "utf-8");
+      } catch (e) {}
+
+      try {
+        await supabaseServer.from("crm_data").upsert({
+          id: "gpa_angola_main_db",
+          payload: currentData,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "id" });
+      } catch (e) {}
+
+      if (isMySqlConfigured()) {
+        saveCrmDataToMySql(currentData).catch(console.warn);
+      }
+
+      broadcastWS({ type: "USER_STATUS_UPDATE", payload: { id, status: updatedStatus } });
+      await broadcastFailover("USER_STATUS_UPDATE", { id, status: updatedStatus });
+    }
+
+    res.json({ success: true, id, status: updatedStatus });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/users/status", async (req, res) => {
+  try {
+    const { id, status } = req.body || {};
+    if (!id || !status) return res.status(400).json({ error: "ID e status são obrigatórios" });
+
+    const currentData = getCrmData();
+    if (Array.isArray(currentData.comerciais)) {
+      currentData.comerciais = currentData.comerciais.map((u: any) => {
+        if (u.id === id) {
+          return { ...u, status };
+        }
+        return u;
+      });
+
+      try {
+        fs.writeFileSync(CRM_DB_FILE, JSON.stringify(currentData, null, 2), "utf-8");
+      } catch (e) {}
+
+      try {
+        await supabaseServer.from("crm_data").upsert({
+          id: "gpa_angola_main_db",
+          payload: currentData,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "id" });
+      } catch (e) {}
+    }
+
+    res.json({ success: true, id, status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// ----------------------------------------------------
+
 // Helper function to clean text from HTML exports
 function cleanHtmlCell(text: string): string {
   if (!text) return '';

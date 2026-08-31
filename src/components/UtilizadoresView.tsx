@@ -10,7 +10,7 @@ interface UtilizadoresViewProps {
   loggedUser: Usuario;
   onOpenAddUser: () => void;
   onOpenEditUser: (user: Usuario) => void;
-  onToggleBlockUser: (id: string) => void;
+  onToggleBlockUser: (id: string, explicitStatus?: 'ativo' | 'bloqueado') => void;
   onToggleMuteUser: (id: string) => void;
   onDeleteUser: (id: string) => void;
   onUpdateUserPhoto?: (userId: string, photo: string) => void;
@@ -152,9 +152,11 @@ export default function UtilizadoresView({
           <tbody className="divide-y divide-gray-300 text-gray-900">
             {comerciais.map(u => {
               const initials = getInitials(u.nome);
-              const isBlocked = u.status === 'bloqueado';
+              const isBlocked = String(u.status || '').toLowerCase().trim() === 'bloqueado' || String(u.status || '').toLowerCase().trim() === 'inativo';
+              const canManageThisUser = (role === 'admin' || role === 'supervisor' || isPureAdminUser(loggedUser));
+              const isSelf = u.id === loggedUser.id || (u.email && loggedUser.email && u.email.toLowerCase().trim() === loggedUser.email.toLowerCase().trim());
               return (
-                <tr key={u.id} className="hover:bg-blue-50/50 transition-colors">
+                <tr key={u.id} className={`hover:bg-blue-50/50 transition-colors ${isBlocked ? 'bg-rose-50/40' : ''}`}>
                   <td className="px-3.5 py-2.5 border-r border-gray-300">
                     <div className="flex items-center gap-3">
                       <div className="relative group flex-shrink-0">
@@ -165,9 +167,17 @@ export default function UtilizadoresView({
                             {initials}
                           </div>
                         )}
+                        {isBlocked && (
+                          <span className="absolute -top-1 -right-1 bg-rose-600 text-white p-1 rounded-full text-[9px] shadow-sm" title="Utilizador Bloqueado">
+                            <Lock size={10} />
+                          </span>
+                        )}
                       </div>
                       <div>
-                        <strong className="text-gray-900 font-bold block text-sm">{u.nome}</strong>
+                        <strong className="text-gray-900 font-bold block text-sm flex items-center gap-1.5">
+                          {u.nome}
+                          {isSelf && <span className="text-[9px] bg-blue-100 text-blue-800 font-mono px-1 py-0.2 rounded-xs font-bold">(Você)</span>}
+                        </strong>
                         <span className="text-[11px] text-gray-500 uppercase block font-semibold">{u.funcao}</span>
                       </div>
                     </div>
@@ -197,11 +207,25 @@ export default function UtilizadoresView({
                   <td className="px-3 py-2 border-r border-gray-300 text-gray-800 font-medium">{u.provincia || 'Luanda'}</td>
                   <td className="px-3 py-2 border-r border-gray-300 text-center">
                     <div className="flex flex-col items-center gap-0.5">
-                      <span className={`px-2 py-0.5 rounded-xs text-[9px] font-bold uppercase border ${
-                        isBlocked ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                      }`}>
-                        {u.status}
-                      </span>
+                      {canManageThisUser && !isSelf ? (
+                        <select
+                          value={isBlocked ? 'bloqueado' : 'ativo'}
+                          onChange={(e) => onToggleBlockUser(u.id, e.target.value as 'ativo' | 'bloqueado')}
+                          className={`px-1.5 py-0.5 rounded-xs text-[10px] font-extrabold uppercase border cursor-pointer transition-colors shadow-2xs ${
+                            isBlocked ? 'bg-rose-100 text-rose-950 border-rose-400' : 'bg-emerald-100 text-emerald-950 border-emerald-400'
+                          }`}
+                          title="Alterar estado da conta (Ativo / Bloqueado)"
+                        >
+                          <option value="ativo">🟢 Ativo</option>
+                          <option value="bloqueado">🔴 Bloqueado</option>
+                        </select>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-xs text-[9px] font-bold uppercase border ${
+                          isBlocked ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        }`}>
+                          {isBlocked ? 'Bloqueado' : 'Ativo'}
+                        </span>
+                      )}
                       {u.silencioso && (
                         <span className="bg-amber-100 text-amber-900 px-1 py-0.2 rounded-xs border border-amber-300 font-bold text-[8px] uppercase font-mono">
                           Silenciado
@@ -226,7 +250,7 @@ export default function UtilizadoresView({
                       )}
 
                       {/* Metas / Edit */}
-                      {(role === 'admin' || role === 'supervisor') && (
+                      {(role === 'admin' || role === 'supervisor' || isPureAdminUser(loggedUser)) && (
                         <button
                           onClick={() => onOpenEditUser(u)}
                           className="text-[10px] font-bold border border-gray-300 bg-gray-100 hover:bg-amber-500 hover:text-gray-950 text-gray-900 px-2 py-0.5 rounded-xs transition-colors cursor-pointer"
@@ -235,17 +259,26 @@ export default function UtilizadoresView({
                         </button>
                       )}
 
-                      {/* Block Toggle */}
-                      {(role === 'admin' || role === 'supervisor') && u.id !== loggedUser.id && (
+                      {/* Block Toggle Button */}
+                      {canManageThisUser && !isSelf && (
                         <button
-                          onClick={() => onToggleBlockUser(u.id)}
-                          className={`text-[10px] font-bold border px-2 py-0.5 rounded-xs transition-colors cursor-pointer ${
+                          onClick={() => onToggleBlockUser(u.id, isBlocked ? 'ativo' : 'bloqueado')}
+                          className={`text-[10px] font-bold border px-2.5 py-0.5 rounded-xs transition-all shadow-2xs flex items-center gap-1 cursor-pointer ${
                             isBlocked
-                              ? 'border-emerald-400 bg-emerald-100 text-emerald-950 hover:bg-emerald-200'
+                              ? 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold'
                               : 'border-rose-400 bg-rose-100 text-rose-950 hover:bg-rose-200'
                           }`}
+                          title={isBlocked ? 'Clique para DESBLOQUEAR a conta' : 'Clique para BLOQUEAR a conta'}
                         >
-                          {isBlocked ? 'Ativar' : 'Bloquear'}
+                          {isBlocked ? (
+                            <>
+                              <CheckCircle2 size={11} className="text-white" /> Desbloquear
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={11} className="text-rose-800" /> Bloquear
+                            </>
+                          )}
                         </button>
                       )}
 
@@ -261,7 +294,7 @@ export default function UtilizadoresView({
                       )}
 
                       {/* Delete User */}
-                      {role === 'admin' && u.id !== loggedUser.id && (
+                      {role === 'admin' && !isSelf && (
                         <button
                           onClick={() => onDeleteUser(u.id)}
                           className="p-1 rounded-xs border border-rose-300 bg-rose-50 hover:bg-rose-700 hover:text-white text-rose-800 transition-colors cursor-pointer"

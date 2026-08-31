@@ -36,24 +36,24 @@ export function sanitizeAndDeduplicateUsers(list: Usuario[] = []): Usuario[] {
     if (email) seenEmails.add(email);
     if (nome) seenNames.add(nome);
 
-    // Deep preservation: match with initial seed for missing metadata but NEVER overwrite custom photo/password
+    // Deep preservation: match with initial seed by ID or Email (never strictly by old name)
     const seedMatch = initialComerciais.find(initU => 
-      initU.id === u.id || 
-      initU.email.toLowerCase().trim() === email || 
-      initU.nome.toLowerCase().trim() === nome
+      (id && initU.id === id) || 
+      (email && initU.email.toLowerCase().trim() === email)
     );
 
     const preservedUser: Usuario = {
       ...(seedMatch || {}),
       ...u,
-      // Guarantee custom photo and password are strictly preserved
-      foto: u.foto !== undefined && u.foto !== null ? u.foto : (seedMatch?.foto || ''),
-      senha: u.senha ? u.senha : (seedMatch?.senha || 'gpa2026'),
-      telefone: u.telefone || seedMatch?.telefone || '922000000',
-      whatsappNumero: u.whatsappNumero || seedMatch?.whatsappNumero || u.telefone || '922000000',
+      // User or admin explicit edits take absolute precedence over seed values
+      nome: u.nome || seedMatch?.nome || 'Utilizador',
+      senha: u.senha !== undefined && u.senha !== '' ? u.senha : (seedMatch?.senha || 'gpa2026'),
       perfil: u.perfil || seedMatch?.perfil || 'comercial',
       funcao: u.funcao || seedMatch?.funcao || 'Comercial',
-      status: u.status || seedMatch?.status || 'ativo',
+      foto: u.foto !== undefined && u.foto !== null ? u.foto : (seedMatch?.foto || ''),
+      telefone: u.telefone || seedMatch?.telefone || '922000000',
+      whatsappNumero: u.whatsappNumero || seedMatch?.whatsappNumero || u.telefone || '922000000',
+      status: (u.status && String(u.status).trim() !== '') ? u.status : (seedMatch?.status || 'ativo'),
       metaSemanal: u.metaSemanal !== undefined ? u.metaSemanal : (seedMatch?.metaSemanal || 3750000),
       metaMensal: u.metaMensal !== undefined ? u.metaMensal : (seedMatch?.metaMensal || 15000000)
     };

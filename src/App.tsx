@@ -1768,6 +1768,7 @@ export default function App() {
   };
 
   const handleDeleteUser = (userId: string) => {
+    lastMutatedTimeRef.current = Date.now() + 15000;
     const target = comerciais.find(u => u.id === userId);
     if (target) {
       moveToRecycleBin('utilizador', userId, target.nome, `Email: ${target.email} | Função: ${target.funcao || 'Comercial'}`, target);
@@ -1775,6 +1776,29 @@ export default function App() {
     const updatedComerciais = comerciais.filter(u => u.id !== userId);
     setComerciais(updatedComerciais);
     saveToLocalStorage('gpa_comerciais', updatedComerciais);
+
+    const payload = {
+      comerciais: updatedComerciais,
+      clients,
+      visits,
+      deals,
+      guidelines,
+      notifications,
+      activityFeed,
+      arquivos,
+      crmName,
+      telSede,
+      relatoriosDiarios,
+      historicoSemanas,
+      historicoMeses,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
+    };
+    saveCrmDataToFirestore(payload).catch(console.warn);
+    fetch('/api/crm-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(console.warn);
   };
 
   const handleDeleteDeal = (dealId: string) => {
@@ -2196,12 +2220,13 @@ export default function App() {
     const email = fd.get('email') as string;
     const senha = fd.get('senha') as string;
     const perfil = fd.get('perfil') as string;
+    const status = (fd.get('status') as Usuario['status']) || selectedUserForEdit.status || 'ativo';
     const funcao = fd.get('funcao') as string;
     const meta = parseFloat(fd.get('metaSemanal') as string || '0');
     const prov = fd.get('provincia') as string;
     const newPhoto = userModalPhoto !== '' ? userModalPhoto : selectedUserForEdit.foto;
 
-    lastMutatedTimeRef.current = Date.now();
+    lastMutatedTimeRef.current = Date.now() + 15000;
     const updatedList = comerciais.map(u => {
       if (u.id === selectedUserForEdit.id) {
         return {
@@ -2210,6 +2235,7 @@ export default function App() {
           email: email || u.email,
           senha: senha || u.senha,
           perfil: (perfil as Usuario['perfil']) || u.perfil,
+          status: status,
           funcao: funcao || u.funcao,
           metaSemanal: meta,
           metaMensal: meta * 4,
@@ -2230,6 +2256,7 @@ export default function App() {
         email: email || loggedUser.email,
         senha: senha || loggedUser.senha,
         perfil: (perfil as Usuario['perfil']) || loggedUser.perfil,
+        status: status,
         funcao: funcao || loggedUser.funcao,
         metaSemanal: meta,
         metaMensal: meta * 4,
@@ -2252,6 +2279,9 @@ export default function App() {
       arquivos,
       crmName,
       telSede,
+      relatoriosDiarios,
+      historicoSemanas,
+      historicoMeses,
       baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
     };
     saveCrmDataToFirestore(payload).catch(console.warn);
@@ -2260,6 +2290,12 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(console.warn);
+
+    addNotification(
+      'Utilizador Atualizado ✏️',
+      `Dados e estado da conta de "${nome || selectedUserForEdit.nome}" guardados com sucesso.`,
+      'success'
+    );
 
     setIsEditUserOpen(false);
     setSelectedUserForEdit(null);
@@ -2695,27 +2731,103 @@ export default function App() {
   };
 
   // User Administration callbacks
-  const handleToggleBlockUser = (id: string) => {
-    setComerciais(prev => {
-      return prev.map(u => {
-        if (u.id === id) {
-          const nextStatus = u.status === 'ativo' ? 'bloqueado' : 'ativo';
-          return { ...u, status: nextStatus };
-        }
-        return u;
-      });
+  const handleToggleBlockUser = (id: string, explicitStatus?: 'ativo' | 'bloqueado') => {
+    lastMutatedTimeRef.current = Date.now() + 15000;
+    
+    let targetUser: Usuario | null = null;
+    let nextStatus: 'ativo' | 'bloqueado' = 'ativo';
+
+    const updatedComerciais = comerciais.map(u => {
+      if (u.id === id) {
+        const currentlyBlocked = String(u.status || '').toLowerCase().trim() === 'bloqueado' || String(u.status || '').toLowerCase().trim() === 'inativo';
+        nextStatus = explicitStatus ? explicitStatus : (currentlyBlocked ? 'ativo' : 'bloqueado');
+        targetUser = { ...u, status: nextStatus };
+        return targetUser;
+      }
+      return u;
     });
+
+    setComerciais(updatedComerciais);
+    saveToLocalStorage('gpa_comerciais', updatedComerciais);
+
+    if (loggedUser && (loggedUser.id === id || (targetUser && loggedUser.email.toLowerCase() === (targetUser as Usuario).email.toLowerCase()))) {
+      const updatedLogged = { ...loggedUser, status: nextStatus };
+      setLoggedUser(updatedLogged);
+      saveToLocalStorage('gpa_logged_user', updatedLogged);
+    }
+
+    const payload = {
+      comerciais: updatedComerciais,
+      clients,
+      visits,
+      deals,
+      guidelines,
+      notifications,
+      activityFeed,
+      arquivos,
+      crmName,
+      telSede,
+      relatoriosDiarios,
+      historicoSemanas,
+      historicoMeses,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
+    };
+
+    saveCrmDataToFirestore(payload).catch(err => console.warn('Error saving user status to Firestore:', err));
+    fetch('/api/crm-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(console.warn);
+    fetch('/api/users/toggle-block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: nextStatus })
+    }).catch(() => {});
+
+    const uName = (targetUser as Usuario | null)?.nome || 'Utilizador';
+    if (nextStatus === 'ativo') {
+      addNotification('Utilizador Desbloqueado 🔓', `O utilizador "${uName}" foi desbloqueado com sucesso e já tem permissão para aceder à conta.`, 'success');
+    } else {
+      addNotification('Utilizador Bloqueado 🔒', `O utilizador "${uName}" foi bloqueado pelo Administrador. O acesso à conta foi suspenso.`, 'warn');
+    }
   };
 
   const handleToggleMuteUser = (id: string) => {
-    setComerciais(prev => {
-      return prev.map(u => {
-        if (u.id === id) {
-          return { ...u, silencioso: !u.silencioso };
-        }
-        return u;
-      });
+    lastMutatedTimeRef.current = Date.now() + 15000;
+    const updatedComerciais = comerciais.map(u => {
+      if (u.id === id) {
+        return { ...u, silencioso: !u.silencioso };
+      }
+      return u;
     });
+
+    setComerciais(updatedComerciais);
+    saveToLocalStorage('gpa_comerciais', updatedComerciais);
+
+    const payload = {
+      comerciais: updatedComerciais,
+      clients,
+      visits,
+      deals,
+      guidelines,
+      notifications,
+      activityFeed,
+      arquivos,
+      crmName,
+      telSede,
+      relatoriosDiarios,
+      historicoSemanas,
+      historicoMeses,
+      baseDuasSemanas: (() => { try { return JSON.parse(localStorage.getItem('gpa_base_duas_semanas') || '[]') } catch { return [] } })()
+    };
+
+    saveCrmDataToFirestore(payload).catch(console.warn);
+    fetch('/api/crm-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(console.warn);
   };
 
   if (!loggedUser) {
@@ -3797,7 +3909,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-gray-700 uppercase">Perfil</label>
+                  <label className="text-[10px] font-bold text-gray-700 uppercase">Perfil de Acesso</label>
                   <select name="perfil" defaultValue={selectedUserForEdit.perfil} className="text-xs font-extrabold text-slate-900 bg-white border border-gray-400 rounded-lg p-2.5 focus:outline-none focus:border-blue-600">
                     <option value="comercial">Comercial</option>
                     <option value="supervisor">Supervisor</option>
@@ -3805,9 +3917,17 @@ export default function App() {
                   </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-gray-700 uppercase">Função / Cargo</label>
-                  <input type="text" name="funcao" defaultValue={selectedUserForEdit.funcao} required className="text-xs font-bold text-slate-900 bg-white border border-gray-400 rounded-lg p-2.5 focus:outline-none focus:border-blue-600" />
+                  <label className="text-[10px] font-bold text-gray-700 uppercase">Estado da Conta (Acesso)</label>
+                  <select name="status" defaultValue={selectedUserForEdit.status || 'ativo'} className="text-xs font-extrabold text-slate-900 bg-white border border-gray-400 rounded-lg p-2.5 focus:outline-none focus:border-blue-600">
+                    <option value="ativo">🟢 Ativo (Desbloqueado)</option>
+                    <option value="bloqueado">🔴 Bloqueado (Restrito)</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-gray-700 uppercase">Função / Cargo</label>
+                <input type="text" name="funcao" defaultValue={selectedUserForEdit.funcao} required className="text-xs font-bold text-slate-900 bg-white border border-gray-400 rounded-lg p-2.5 focus:outline-none focus:border-blue-600" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

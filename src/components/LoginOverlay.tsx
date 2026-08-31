@@ -102,8 +102,9 @@ export default function LoginOverlay({ comerciais, onLoginSuccess, addNotificati
       return;
     }
 
-    if (found.status === 'bloqueado') {
-      alert('Esta conta está bloqueada! Contacte o Administrador.');
+    const isBlocked = String(found.status || '').toLowerCase().trim() === 'bloqueado' || String(found.status || '').toLowerCase().trim() === 'inativo';
+    if (isBlocked) {
+      alert('Esta conta está bloqueada pelo Administrador! Se é administrador, inicie sessão com a sua conta de Administrador para a desbloquear.');
       return;
     }
 

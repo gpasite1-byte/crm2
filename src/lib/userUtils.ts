@@ -53,7 +53,7 @@ export function sanitizeAndDeduplicateUsers(list: Usuario[] = []): Usuario[] {
       foto: u.foto !== undefined && u.foto !== null ? u.foto : (seedMatch?.foto || ''),
       telefone: u.telefone || seedMatch?.telefone || '922000000',
       whatsappNumero: u.whatsappNumero || seedMatch?.whatsappNumero || u.telefone || '922000000',
-      status: u.status || seedMatch?.status || 'ativo',
+      status: (u.status && String(u.status).trim() !== '') ? u.status : (seedMatch?.status || 'ativo'),
       metaSemanal: u.metaSemanal !== undefined ? u.metaSemanal : (seedMatch?.metaSemanal || 3750000),
       metaMensal: u.metaMensal !== undefined ? u.metaMensal : (seedMatch?.metaMensal || 15000000)
     };
