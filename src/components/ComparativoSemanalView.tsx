@@ -877,7 +877,20 @@ export default function ComparativoSemanalView({
         const semAnterior = weeksWithData.length >= 2 ? weeksWithData[weeksWithData.length - 2] : null;
         const semFinda = weeksWithData.length >= 1 ? weeksWithData[weeksWithData.length - 1] : null;
 
-        const comerciaisLabels = [...new Set(allDeals.map(d => d.comercialNome || 'Sem atribuição'))].filter(Boolean).slice(0, 8);
+        // Collect all active commercial managers (including Carlos Francisco) without any truncation
+        const uniqueComercialNames = new Set<string>();
+        (comerciais || []).filter(isUserCommercial).forEach(c => {
+          if (c.nome && !c.nome.toLowerCase().includes('admin')) {
+            uniqueComercialNames.add(c.nome.trim());
+          }
+        });
+        allDeals.forEach(d => {
+          if (d.comercialNome && !d.comercialNome.toLowerCase().includes('sem atribuição') && !d.comercialNome.toLowerCase().includes('admin')) {
+            uniqueComercialNames.add(d.comercialNome.trim());
+          }
+        });
+
+        const comerciaisLabels = Array.from(uniqueComercialNames);
 
         const isDealInWeek = (d: Deal, b: any) => {
           if (!b) return false;
@@ -889,7 +902,19 @@ export default function ComparativoSemanalView({
         };
 
         const chartDataComercial = comerciaisLabels.map(nome => {
-          const dealsComercial = allDeals.filter(d => (d.comercialNome || '').toLowerCase().includes(nome.toLowerCase().split(' ')[0]));
+          const tLow = nome.toLowerCase();
+          const tFirst = tLow.split(' ')[0];
+          const tLast = tLow.split(' ').slice(-1)[0];
+
+          const dealsComercial = allDeals.filter(d => {
+            const dNome = (d.comercialNome || '').toLowerCase().trim();
+            if (!dNome) return false;
+            if (dNome === tLow) return true;
+            const dFirst = dNome.split(' ')[0];
+            const dLast = dNome.split(' ').slice(-1)[0];
+            return (dFirst === tFirst && (dLast === tLast || tLow.includes(dFirst) || dNome.includes(tFirst)));
+          });
+
           const dealsAnterior = semAnterior ? dealsComercial.filter(d => isDealInWeek(d, semAnterior)) : [];
           const dealsFinda = semFinda ? dealsComercial.filter(d => isDealInWeek(d, semFinda)) : [];
 
