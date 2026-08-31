@@ -79,6 +79,10 @@ export function parseExcelDate(rawVal: any): { date: Date | null; iso: string; p
 }
 
 function formatParsedDate(d: Date): { date: Date; iso: string; pt: string } {
+  // Sanity check: prevent invalid Excel epoch years like 8744
+  if (d.getFullYear() < 2025 || d.getFullYear() > 2028) {
+    d.setFullYear(2026);
+  }
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');

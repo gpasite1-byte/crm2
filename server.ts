@@ -738,6 +738,8 @@ async function syncAllReportsToDatabase() {
         const diasEmAberto = parseInt(getColVal(row, ["dias em aberto", "dias"]), 10) || 5;
 
         if (!cliente && !servico && valProposta === 0) return;
+        if (cliente && (/^\d+$/.test(cliente) || cliente.toLowerCase().includes("total") || cliente.toLowerCase().includes("meta"))) return;
+        if (servico && /^\d+$/.test(servico) && valProposta === 0) return;
 
         // Stage
         const estLower = estado.toLowerCase();
@@ -755,6 +757,17 @@ async function syncAllReportsToDatabase() {
         } else if (dataEnvioCol && dataEnvioCol.match(/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}$/)) {
           const p = dataEnvioCol.split(/[\/\-\.]/);
           finalDate = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+
+        // Sanity check year to prevent invalid 8744
+        if (finalDate) {
+          const parts = finalDate.split('-');
+          if (parts.length === 3) {
+            const yr = parseInt(parts[0], 10);
+            if (yr < 2025 || yr > 2028) {
+              finalDate = `2026-${parts[1] || '08'}-${parts[2] || '24'}`;
+            }
+          }
         }
 
         const comObj = matchCommercial(gestor);
@@ -884,6 +897,10 @@ async function syncAllReportsToDatabase() {
           try {
             const wb = XLSX.readFile(full);
             wb.SheetNames.forEach((sheetName: string) => {
+              const lowerName = sheetName.toLowerCase();
+              const skipSheets = ['metas', 'performance', 'manual', 'instrucoes', 'instruções', 'listas', 'capa', 'config'];
+              if (skipSheets.some(s => lowerName.includes(s))) return;
+
               const ws = wb.Sheets[sheetName];
               const rawData = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
               if (rawData && rawData.length > 2) {

@@ -227,8 +227,16 @@ import { parseExcelDate } from './temporalEngine';
  */
 export function parseDateFlexible(dateStr?: string | Date | number | null): Date | null {
   if (dateStr === null || dateStr === undefined || dateStr === '') return null;
+  const sanitizeYear = (d: Date | null): Date | null => {
+    if (!d || isNaN(d.getTime())) return null;
+    if (d.getFullYear() < 2025 || d.getFullYear() > 2028) {
+      d.setFullYear(2026);
+    }
+    return d;
+  };
+
   const res = parseExcelDate(dateStr);
-  if (res.date) return res.date;
+  if (res.date) return sanitizeYear(res.date);
 
   const str = String(dateStr).trim();
   if (!str || str === '-') return null;
@@ -242,14 +250,14 @@ export function parseDateFlexible(dateStr?: string | Date | number | null): Date
       const month = parseInt(parts[1], 10) - 1;
       const year = parseInt(parts[2], 10);
       const d = new Date(year, month, day);
-      if (!isNaN(d.getTime())) return d;
+      if (!isNaN(d.getTime())) return sanitizeYear(d);
     } else if (parts[0].length === 4) {
       // YYYY-MM-DD format
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
       const d = new Date(year, month, day);
-      if (!isNaN(d.getTime())) return d;
+      if (!isNaN(d.getTime())) return sanitizeYear(d);
     }
   }
 
@@ -314,17 +322,17 @@ export function parseDateFlexible(dateStr?: string | Date | number | null): Date
       
       if (startDay !== null && startDay > endDay) {
          const d = new Date(year, month - 1, startDay);
-         if (!isNaN(d.getTime())) return d;
+         if (!isNaN(d.getTime())) return sanitizeYear(d);
       } else {
          const d = new Date(year, month, startDay !== null ? startDay : endDay);
-         if (!isNaN(d.getTime())) return d;
+         if (!isNaN(d.getTime())) return sanitizeYear(d);
       }
     }
   }
 
   // Fallback to native ISO parse
   const isoParsed = new Date(str);
-  if (!isNaN(isoParsed.getTime())) return isoParsed;
+  if (!isNaN(isoParsed.getTime())) return sanitizeYear(isoParsed);
 
   return null;
 }
@@ -451,17 +459,19 @@ export function generateDynamicWeeklyTimeline(
   // Adicionar semana da refDate actual
   weekStartMap.set(refMonday.getTime(), refMonday);
 
-  // Adicionar qualquer outra semana encontrada nas propostas
+  // Adicionar qualquer outra semana encontrada nas propostas (filtrando anos válidos)
   deals.forEach(d => {
     const dDate = parseDateFlexible(d.dataEnvio) || parseDateFlexible(d.semana);
-    if (dDate) {
+    if (dDate && dDate.getFullYear() >= 2025 && dDate.getFullYear() <= 2027) {
       const dMonday = getMonday(dDate);
       weekStartMap.set(dMonday.getTime(), dMonday);
     }
   });
 
-  // Ordenar cronologicamente
-  const weekStartDates = Array.from(weekStartMap.values()).sort((a, b) => a.getTime() - b.getTime());
+  // Ordenar cronologicamente e filtrar apenas anos válidos
+  const weekStartDates = Array.from(weekStartMap.values())
+    .filter(d => d.getFullYear() >= 2025 && d.getFullYear() <= 2027)
+    .sort((a, b) => a.getTime() - b.getTime());
 
   const currentMondayTime = refMonday.getTime();
 

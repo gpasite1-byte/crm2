@@ -180,31 +180,39 @@ export default function ComparativoSemanalView({
     return generateDynamicWeeklyTimeline(allDeals, comerciais, refDate || new Date());
   }, [allDeals, comerciais, refDate]);
 
-  // Display all weeks that have proposals/activity or current week, sorted chronologically
+  // Display strictly valid weeks that have proposals/activity or current week, sorted chronologically
   const displayBuckets = useMemo(() => {
-    const withData = weeklyBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0 || b.isCurrentWeek);
-    if (withData.length >= 2) {
-      return withData;
+    const validBuckets = weeklyBuckets.filter(b => {
+      const yr = b.startDate ? b.startDate.getFullYear() : 2026;
+      if (yr < 2025 || yr > 2027) return false;
+      // Exclude empty future weeks with zero activity to prevent confusing charts
+      if (b.isFutureWeek && b.propostasCount === 0 && b.valorProposto === 0 && b.valorAprovado === 0) {
+        return false;
+      }
+      return b.propostasCount > 0 || b.valorProposto > 0 || b.valorAprovado > 0 || b.isCurrentWeek;
+    });
+    if (validBuckets.length >= 1) {
+      return validBuckets;
     }
-    return weeklyBuckets.slice(-8);
+    return weeklyBuckets.filter(b => b.isCurrentWeek || b.propostasCount > 0);
   }, [weeklyBuckets]);
 
   // Latest 2 weeks for direct comparison (e.g. 17-21 Ago vs 24-28 Ago)
   const latestTwoWeeks = useMemo(() => {
-    const weeksWithData = weeklyBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0);
+    const weeksWithData = displayBuckets.filter(b => b.propostasCount > 0 || b.valorProposto > 0);
     if (weeksWithData.length >= 2) {
       return {
         penultimate: weeksWithData[weeksWithData.length - 2],
         ultimate: weeksWithData[weeksWithData.length - 1]
       };
-    } else if (weeklyBuckets.length >= 2) {
+    } else if (displayBuckets.length >= 2) {
       return {
-        penultimate: weeklyBuckets[weeklyBuckets.length - 2],
-        ultimate: weeklyBuckets[weeklyBuckets.length - 1]
+        penultimate: displayBuckets[displayBuckets.length - 2],
+        ultimate: displayBuckets[displayBuckets.length - 1]
       };
     }
     return null;
-  }, [weeklyBuckets]);
+  }, [displayBuckets]);
 
   // Format currency helpers — formato angolano completo e perceptível: 1.385.100,48 Kz
   const formatKz = (v: number) => {
@@ -217,10 +225,11 @@ export default function ComparativoSemanalView({
     return formatKz(v);
   };
 
-  // Recharts dataset
+  // Recharts dataset (clean and without phantom future weeks)
   const chartData = useMemo(() => {
     return displayBuckets.map(b => ({
-      week: b.label.split(' (')[0],
+      week: b.label.split(' (')[0] + (b.isCurrentWeek ? ' (ESTA SEMANA)' : ''),
+      shortWeek: b.label.split(' (')[0],
       fullLabel: b.label,
       propostas: b.propostasCount,
       valorPropostoM: parseFloat((b.valorProposto / 1000000).toFixed(2)),

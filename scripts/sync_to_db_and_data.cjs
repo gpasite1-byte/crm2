@@ -45,26 +45,34 @@ existingClients.forEach(c => {
 });
 const mergedClients = Array.from(mergedClientsMap.values());
 
+const sanitizedDeals = deduplicatedDeals.filter(d => {
+  if (!d) return false;
+  if (d.id && (d.id.includes('Metas_Performance') || d.id.includes('Metas'))) return false;
+  if (d.dataEnvio && (d.dataEnvio.includes('8744') || parseInt(d.dataEnvio.substring(0, 4), 10) > 2028)) return false;
+  if (d.clienteNome && (/^\d+$/.test(d.clienteNome) || d.clienteNome.toLowerCase().includes('meta'))) return false;
+  return true;
+});
+
 const updatedDb = {
   ...currentDb,
   comerciais: existingComerciais,
   clients: mergedClients,
-  deals: deduplicatedDeals,
+  deals: sanitizedDeals,
   lastUpdated: new Date().toISOString()
 };
 
 fs.writeFileSync(dbPath, JSON.stringify(updatedDb, null, 2), 'utf-8');
-console.log(`✅ Successfully updated crm-db.json with ${deduplicatedDeals.length} deals and ${mergedClients.length} clients.`);
+console.log(`✅ Successfully updated crm-db.json with ${sanitizedDeals.length} deals and ${mergedClients.length} clients.`);
 
 // 2. Update src/data/officialExcelProposals.ts
 const proposalsTsContent = `// PROPOSTAS COMERCIAIS REAIS DO RELATORIO CRM GPA (Actualizado até 24–28 Ago 2026)
-export const officialExcelProposals = ${JSON.stringify(deduplicatedDeals, null, 2)};
+export const officialExcelProposals = ${JSON.stringify(sanitizedDeals, null, 2)};
 `;
 fs.writeFileSync(path.join(rootDir, 'src', 'data', 'officialExcelProposals.ts'), proposalsTsContent, 'utf-8');
 console.log(`✅ Successfully updated src/data/officialExcelProposals.ts`);
 
 // 3. Update src/data/baseDuasSemanasData.ts
-const baseDuasSemanasFormat = deduplicatedDeals.map((d, i) => ({
+const baseDuasSemanasFormat = sanitizedDeals.map((d, i) => ({
   id: d.id,
   semana: d.semana,
   cliente: d.clienteNome || d.empresa,
